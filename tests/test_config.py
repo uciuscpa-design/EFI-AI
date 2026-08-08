@@ -17,6 +17,7 @@ def test_production_requires_postgresql() -> None:
         Settings(
             environment="production",
             api_key="test-key",
+            database_url="sqlite:///./test.db",
         )
 
 
