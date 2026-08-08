@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from packages.core.models import OrderIntent, Quote, Side
-from packages.persistence.models import Base
+from packages.persistence.models import Base, OrderModel, QuoteModel
 from packages.persistence.service import PersistentService
 
 
@@ -19,5 +19,5 @@ def test_persistence_round_trip() -> None:
         service.order(intent, "filled")
         event = service.audit("test_event", {"ok": True})
         assert event.event_type == "test_event"
-        assert session.query(Base.metadata.tables["quotes"]).count() == 1
-        assert session.query(Base.metadata.tables["orders"]).count() == 1
+        assert session.query(QuoteModel).count() == 1
+        assert session.query(OrderModel).count() == 1
