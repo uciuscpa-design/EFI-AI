@@ -1,4 +1,18 @@
 services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: efi_ai
+      POSTGRES_USER: efi
+      POSTGRES_PASSWORD: ${EFI_POSTGRES_PASSWORD:-efi-dev-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U efi -d efi_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: .
@@ -6,11 +20,18 @@ services:
     environment:
       EFI_ENVIRONMENT: production
       EFI_PAPER_TRADING: "true"
+      EFI_DATABASE_URL: postgresql+psycopg://efi:${EFI_POSTGRES_PASSWORD:-efi-dev-password}@db:5432/efi_ai
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      test: ["CMD", "python", "scripts/healthcheck.py"]
       interval: 15s
       timeout: 5s
       retries: 5
+
+volumes:
+  postgres_data:
