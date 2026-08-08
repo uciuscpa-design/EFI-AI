@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     paper_trading: bool = True
+    api_key: str = ""
+    database_url: str = "sqlite:///./efi_ai.db"
     max_position_notional: float = 10_000.0
     max_daily_loss: float = 1_000.0
 
