@@ -14,5 +14,5 @@ class PaperBroker:
     """In-memory broker. No real-money orders can leave this process."""
 
     def submit(self, intent: OrderIntent) -> Execution:
-        order_id = f"paper-{intent.created_at.timestamp_ns()}"
+        order_id = f"paper-{int(intent.created_at.timestamp() * 1_000_000_000)}"
         return Execution(order_id, "filled", intent)
