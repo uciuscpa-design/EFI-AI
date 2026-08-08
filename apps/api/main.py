@@ -10,12 +10,12 @@ from apps.api.schemas import OrderRequest, QuoteRequest, SignalRequest
 from apps.api.services import TradingService
 from packages.core.config import get_settings
 from packages.persistence.db import SessionLocal, engine
-from packages.persistence.models import Base
+from packages.persistence.models import AuditEventModel, Base
 from packages.persistence.service import PersistentService
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
-app = FastAPI(title=settings.app_name, version="0.5.0")
+app = FastAPI(title=settings.app_name, version="0.5.1")
 app.middleware("http")(request_logging_middleware)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
 trading = TradingService(settings)
@@ -81,5 +81,5 @@ def paper_order(request: OrderRequest) -> dict[str, object]:
 def recent_audit(limit: int = 100) -> list[dict[str, object]]:
     limit = max(1, min(limit, 500))
     with SessionLocal() as session:
-        rows = session.query(PersistentService.__annotations__ if False else __import__('packages.persistence.models', fromlist=['AuditEventModel']).AuditEventModel).order_by(__import__('packages.persistence.models', fromlist=['AuditEventModel']).AuditEventModel.created_at.desc()).limit(limit).all()
+        rows = session.query(AuditEventModel).order_by(AuditEventModel.created_at.desc()).limit(limit).all()
     return [{"id": row.id, "event_type": row.event_type, "actor": row.actor, "payload": row.payload, "created_at": row.created_at} for row in rows]
