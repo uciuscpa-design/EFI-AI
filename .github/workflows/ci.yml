@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'agent/**']
+    branches: [main, 'agent/**', 'fix/**']
   pull_request:
 
 jobs:
@@ -26,11 +26,11 @@ jobs:
       EFI_DATABASE_URL: postgresql+psycopg://efi:ci-password@localhost:5432/efi_ai
       EFI_PAPER_TRADING: "true"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: python -m pip install --upgrade pip
       - run: pip install -e '.[dev]'
       - run: alembic upgrade head
-      - run: pytest -q
+      - run: pytest -vv --maxfail=1
