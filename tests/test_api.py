@@ -15,3 +15,4 @@ def test_ready_is_paper_trading() -> None:
     response = client.get("/ready")
     assert response.status_code == 200
     assert response.json()["paper_trading"] is True
+    assert response.json()["database"] == "ok"
