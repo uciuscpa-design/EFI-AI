@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     paper_trading: bool = True
     api_key: str = ""
-    database_url: str = "sqlite:///./efi_ai.db"
+    database_url: str = Field(
+        default="sqlite:///./efi_ai.db",
+        validation_alias=AliasChoices("EFI_DATABASE_URL", "DATABASE_URL"),
+    )
     max_position_notional: float = 10_000.0
     max_daily_loss: float = 1_000.0
 
@@ -24,7 +27,7 @@ class Settings(BaseSettings):
             if not self.api_key:
                 raise ValueError("EFI_API_KEY is required in production")
             if not self.database_url.startswith("postgresql"):
-                raise ValueError("EFI_DATABASE_URL must use PostgreSQL in production")
+                raise ValueError("EFI_DATABASE_URL/DATABASE_URL must use PostgreSQL in production")
         return self
 
 
