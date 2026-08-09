@@ -38,3 +38,9 @@ def test_production_safe_configuration_is_valid() -> None:
         database_url="postgresql+psycopg://efi:secret@db/efi_ai",
     )
     assert settings.paper_trading is True
+
+
+def test_cloud_database_url_alias_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://efi:secret@db/efi_ai")
+    settings = Settings(environment="production", api_key="test-key")
+    assert settings.database_url.startswith("postgresql")
