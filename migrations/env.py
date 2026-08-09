@@ -11,7 +11,7 @@ config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
 
-url = os.getenv("EFI_DATABASE_URL")
+url = os.getenv("EFI_DATABASE_URL") or os.getenv("DATABASE_URL")
 if url:
     config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
 
