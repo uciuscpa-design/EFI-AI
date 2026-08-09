@@ -8,22 +8,25 @@ Deploy the FastAPI application to FastAPI Cloud with a managed PostgreSQL databa
 
 - `EFI_ENVIRONMENT=production`
 - `EFI_PAPER_TRADING=true`
-- `EFI_DATABASE_URL=<managed PostgreSQL connection string>`
+- `DATABASE_URL=<managed PostgreSQL connection string>` **or** `EFI_DATABASE_URL=<managed PostgreSQL connection string>`
 - `EFI_API_KEY=<random production secret>`
 - `EFI_MAX_POSITION_NOTIONAL=<approved limit>`
 - `EFI_MAX_DAILY_LOSS=<approved limit>`
+
+FastAPI Cloud integrations commonly expose database credentials as `DATABASE_URL`. EFI-AI accepts that name as a compatibility alias while retaining `EFI_DATABASE_URL` for local and CI configuration. Do not put either database URL or the API key in Git.
 
 ### Release procedure
 
 1. Connect the GitHub repository to FastAPI Cloud.
 2. Select `main` as the production branch.
 3. Configure the environment variables as platform secrets.
-4. Deploy the application.
-5. Run `alembic upgrade head` as the release migration step before traffic is served.
-6. Verify `/health` and `/ready`.
-7. Verify the paper-order workflow with a non-production test request.
-8. Confirm logs contain request IDs and audit events.
-9. Do not configure live brokerage credentials.
+4. Ensure `EFI_API_KEY` is set before setting `EFI_ENVIRONMENT=production` on a new deployment.
+5. Deploy the application.
+6. Run `alembic upgrade head` as the release migration step before traffic is served.
+7. Verify `/health` and `/ready`; `/ready` must report `environment=production`, `paper_trading=true`, and `database=ok`.
+8. Verify the paper-order workflow with a non-production test request.
+9. Confirm logs contain request IDs and audit events.
+10. Do not configure live brokerage credentials.
 
 ### Rollback
 
