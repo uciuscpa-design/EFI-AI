@@ -31,3 +31,8 @@ pythonpath = ["."]
 
 [tool.setuptools.packages.find]
 include = ["apps*", "packages*"]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.10.0",
+]
