@@ -2,7 +2,7 @@
 
 ## Project identity
 - **Name:** GEXY
-- **Repository:** uciuscpa-design/EFI-AI
+- **Repository:** ucius cpa-design/EFI-AI
 - **Branch:** `feature/gexy`
 - **Status:** Milestone 1 in progress
 - **Started:** 2026-08-10
@@ -153,18 +153,21 @@ Implemented:
 - `packages/gexy/models.py` normalized option/exposure contracts.
 - `packages/gexy/gex.py` signed GEX by strike and scenario-price calculations.
 - `packages/gexy/hedge.py` gamma/vanna/charm hedge-pressure decomposition.
+- `packages/gexy/positioning.py` explicit dealer-positioning assumption/ensemble scaffold.
+- `packages/gexy/scenario.py` price-scenario GEX/hedge-pressure surface.
+- `packages/gexy/forecast.py` transparent probabilistic forecast baseline for calibration.
 - Deterministic unit tests under `tests/gexy/`.
 - Architecture document under `projects/gexy/ARCHITECTURE.md`.
 
-Important implementation note:
+Important implementation notes:
 - Dealer positioning is explicitly modeled as an assumption with a confidence weight rather than an observed fact.
-- The initial core is a research engine; it is not yet a validated trading signal.
+- The initial forecast is a research baseline, not a validated trading signal or price-target model.
+- The conversion from hedge-pressure units to SPX points must be learned from historical data rather than assumed universally.
 
 Next:
 - Greek adapters and unit conventions.
-- Positioning ensemble.
 - Gamma flip/wall detection.
-- Scenario hedge-pressure surface.
-- Probabilistic move engine.
-- Historical replay/backtesting.
-- FastAPI/streaming and chart DTOs.
+- Flow and liquidity adapters.
+- Historical replay/backtesting and calibration.
+- FastAPI/streaming endpoints and chart DTOs.
+- Candlestick forecast overlay.
