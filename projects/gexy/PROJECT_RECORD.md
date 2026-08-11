@@ -159,6 +159,8 @@ Implemented:
 - `packages/gexy/levels.py` gamma flip/call-wall/put-wall level detection.
 - `packages/gexy/adapters/alpaca.py` provider adapter contract/capability boundary.
 - `packages/gexy/calibration.py` leakage-safe labels and forecast scoring metrics.
+- `packages/gexy/replay.py` chronological forward-label replay engine.
+- `packages/gexy/backtest.py` chronological train/validation/test split utility.
 - Deterministic unit tests under `tests/gexy/`.
 - Architecture document under `projects/gexy/ARCHITECTURE.md`.
 - Calibration protocol under `projects/gexy/CALIBRATION.md`.
@@ -168,6 +170,7 @@ Important implementation notes:
 - The initial forecast is a research baseline, not a validated trading signal or price-target model.
 - The conversion from hedge-pressure units to SPX points must be learned from historical data rather than assumed universally.
 - Calibration must use chronological, leakage-safe evaluation and compare against simple baselines.
+- Replay targets are deliberately separated from source-time features to reduce temporal leakage.
 
 ### Milestone 1 calibration phase
 Started: 2026-08-11
@@ -177,15 +180,15 @@ Completed:
 - Directional accuracy, MAE, bias and Brier-score metrics.
 - Calibration protocol specifying chronological train/validation/test splits.
 - Explicit leakage controls.
-- Baseline-comparison requirements.
+- Chronological replay target generation.
+- Deterministic temporal backtest splitting.
 
 Tracking:
 - GitHub Issue #6: `GEXY: historical options data and calibration pipeline`.
 
 Next:
-- Historical data ingestion/replay implementation.
-- SPX/ES synchronization.
-- Feature snapshots and forward labels.
+- Historical options/market-data ingestion implementation.
+- SPX/ES synchronization and normalized feature snapshots.
 - Out-of-sample calibration experiments.
 - Flow/liquidity features.
 - FastAPI/streaming endpoints and chart DTOs.
