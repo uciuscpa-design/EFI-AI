@@ -156,18 +156,37 @@ Implemented:
 - `packages/gexy/positioning.py` explicit dealer-positioning assumption/ensemble scaffold.
 - `packages/gexy/scenario.py` price-scenario GEX/hedge-pressure surface.
 - `packages/gexy/forecast.py` transparent probabilistic forecast baseline for calibration.
+- `packages/gexy/levels.py` gamma flip/call-wall/put-wall level detection.
+- `packages/gexy/adapters/alpaca.py` provider adapter contract/capability boundary.
+- `packages/gexy/calibration.py` leakage-safe labels and forecast scoring metrics.
 - Deterministic unit tests under `tests/gexy/`.
 - Architecture document under `projects/gexy/ARCHITECTURE.md`.
+- Calibration protocol under `projects/gexy/CALIBRATION.md`.
 
 Important implementation notes:
 - Dealer positioning is explicitly modeled as an assumption with a confidence weight rather than an observed fact.
 - The initial forecast is a research baseline, not a validated trading signal or price-target model.
 - The conversion from hedge-pressure units to SPX points must be learned from historical data rather than assumed universally.
+- Calibration must use chronological, leakage-safe evaluation and compare against simple baselines.
+
+### Milestone 1 calibration phase
+Started: 2026-08-11
+
+Completed:
+- Forward-move label structure for configurable horizons.
+- Directional accuracy, MAE, bias and Brier-score metrics.
+- Calibration protocol specifying chronological train/validation/test splits.
+- Explicit leakage controls.
+- Baseline-comparison requirements.
+
+Tracking:
+- GitHub Issue #6: `GEXY: historical options data and calibration pipeline`.
 
 Next:
-- Greek adapters and unit conventions.
-- Gamma flip/wall detection.
-- Flow and liquidity adapters.
-- Historical replay/backtesting and calibration.
+- Historical data ingestion/replay implementation.
+- SPX/ES synchronization.
+- Feature snapshots and forward labels.
+- Out-of-sample calibration experiments.
+- Flow/liquidity features.
 - FastAPI/streaming endpoints and chart DTOs.
 - Candlestick forecast overlay.
