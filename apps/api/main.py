@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from apps.api.dependencies import require_api_key
+from apps.api.gexy import router as gexy_router
 from apps.api.middleware import request_logging_middleware
 from apps.api.schemas import OrderRequest, QuoteRequest, SignalRequest
 from apps.api.services import TradingService
@@ -37,6 +38,7 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+app.include_router(gexy_router)
 trading = TradingService(settings)
 
 
