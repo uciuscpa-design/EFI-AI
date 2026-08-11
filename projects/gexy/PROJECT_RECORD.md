@@ -2,9 +2,9 @@
 
 ## Project identity
 - **Name:** GEXY
-- **Repository:** ucius cpa-design/EFI-AI
+- **Repository:** uciuscpa-design/EFI-AI
 - **Branch:** `feature/gexy`
-- **Status:** Initialized
+- **Status:** Milestone 1 in progress
 - **Started:** 2026-08-10
 
 ## Objective
@@ -137,9 +137,8 @@ A separate forecast chart should display expected SPX change versus time and/or 
 ## Project record policy
 Every significant GEXY decision, formula change, data-source decision, architecture change, test result, calibration result, deployment change, and known limitation should be recorded in this project directory and reflected in Git history.
 
-## Current milestone
-**Milestone 0 — Project initialization**
-
+## Milestone history
+### Milestone 0 — Project initialization
 Completed:
 - Project name selected: GEXY.
 - Scope established.
@@ -147,5 +146,25 @@ Completed:
 - Dedicated `feature/gexy` branch created.
 - Initial project record created.
 
-Next milestone:
-**Milestone 1 — Repository architecture and mathematical core.**
+### Milestone 1 — Repository architecture and mathematical core
+Started: 2026-08-10
+
+Implemented:
+- `packages/gexy/models.py` normalized option/exposure contracts.
+- `packages/gexy/gex.py` signed GEX by strike and scenario-price calculations.
+- `packages/gexy/hedge.py` gamma/vanna/charm hedge-pressure decomposition.
+- Deterministic unit tests under `tests/gexy/`.
+- Architecture document under `projects/gexy/ARCHITECTURE.md`.
+
+Important implementation note:
+- Dealer positioning is explicitly modeled as an assumption with a confidence weight rather than an observed fact.
+- The initial core is a research engine; it is not yet a validated trading signal.
+
+Next:
+- Greek adapters and unit conventions.
+- Positioning ensemble.
+- Gamma flip/wall detection.
+- Scenario hedge-pressure surface.
+- Probabilistic move engine.
+- Historical replay/backtesting.
+- FastAPI/streaming and chart DTOs.
