@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .gax_features import GAXFeatures
+from .prediction_journal import PredictionJournalEntry
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,14 @@ class GAXShadowRecord:
     horizon_minutes: int
     model_version: str
     features: GAXFeatures
+
+
+@dataclass(frozen=True)
+class GAXShadowMetrics:
+    resolved: int
+    bias_alignment_accuracy: float
+    mean_magnitude: float
+    mean_absolute_curvature: float
 
 
 def make_gax_shadow_record(
@@ -82,3 +91,33 @@ def load_gax_shadows(path: str | Path) -> list[GAXShadowRecord]:
 
 def index_gax_shadows(records: Iterable[GAXShadowRecord]) -> dict[str, GAXShadowRecord]:
     return {record.prediction_id: record for record in records}
+
+
+def summarize_gax_shadow(
+    entries: Iterable[PredictionJournalEntry],
+    shadows: Iterable[GAXShadowRecord],
+) -> GAXShadowMetrics:
+    shadow_index = index_gax_shadows(shadows)
+    paired = [
+        (entry, shadow_index[entry.prediction_id])
+        for entry in entries
+        if entry.resolved and entry.prediction_id in shadow_index
+    ]
+    if not paired:
+        return GAXShadowMetrics(0, 0.0, 0.0, 0.0)
+
+    def aligned(entry: PredictionJournalEntry, shadow: GAXShadowRecord) -> bool:
+        move = float(entry.realized_move_points or 0.0)
+        bias = shadow.features.acceleration_bias
+        if bias == "up":
+            return move > 0
+        if bias == "down":
+            return move < 0
+        return abs(move) < 1e-9
+
+    return GAXShadowMetrics(
+        resolved=len(paired),
+        bias_alignment_accuracy=sum(aligned(entry, shadow) for entry, shadow in paired) / len(paired),
+        mean_magnitude=sum(shadow.features.magnitude for _, shadow in paired) / len(paired),
+        mean_absolute_curvature=sum(abs(shadow.features.local_gax_curvature) for _, shadow in paired) / len(paired),
+    )
