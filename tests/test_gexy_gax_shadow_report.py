@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from packages.gexy.gax_features import GAXFeatures
 from packages.gexy.gax_shadow_candidate import score_shadow_candidate
@@ -8,6 +8,7 @@ from packages.gexy.gax_shadow_version_sweep import (
     build_consolidated_shadow_v2_report,
     build_shadow_candidate_sweep_by_model_version,
     select_best_shadow_candidate,
+    validate_shadow_candidate_out_of_sample,
 )
 from packages.gexy.live_prediction import LivePrediction
 from packages.gexy.prediction_journal import append_entry, make_entry, resolve_entry, rewrite_entries
@@ -103,6 +104,7 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
         recommendation["recommended"] is False
         for recommendation in consolidated["shadow_candidate_recommendation_by_model_version"].values()
     )
+    assert consolidated["shadow_candidate_out_of_sample"]["validated"] is False
 
     assert report["promotion_recommendation"]["eligible"] is False
     assert report["promotion_recommendation"]["reason"] == "insufficient_overall_samples"
@@ -148,6 +150,54 @@ def test_shadow_candidate_selector_requires_samples_overrides_and_lift() -> None
     assert decision["recommended"] is True
     assert decision["threshold"] == 1.0
     assert decision["lift"] == 0.03
+
+
+def test_shadow_candidate_out_of_sample_uses_later_unseen_block() -> None:
+    t0 = datetime(2026, 8, 13, 14, 0, tzinfo=timezone.utc)
+    features = GAXFeatures(
+        spot=7750.0,
+        local_gax=2.0,
+        local_gax_curvature=0.5,
+        magnitude=2.0,
+        acceleration_bias="up",
+    )
+    entries = []
+    shadows = []
+    for offset in range(4):
+        created_at = t0 + timedelta(minutes=offset * 10)
+        entry = make_entry(
+            created_at=created_at,
+            spot=7750.0,
+            prediction=_prediction(5, "down"),
+        )
+        entries.append(resolve_entry(entry, resolved_at=entry.due_at, realized_spot=7752.0))
+        shadows.append(
+            make_gax_shadow_record(
+                prediction_id=entry.prediction_id,
+                created_at=created_at,
+                horizon_minutes=5,
+                model_version=entry.model_version,
+                features=features,
+            )
+        )
+
+    result = validate_shadow_candidate_out_of_sample(
+        entries,
+        shadows,
+        train_fraction=0.5,
+        min_train_resolved=2,
+        min_train_overrides=2,
+        min_train_lift=0.01,
+        min_validation_resolved=2,
+    )
+    assert result["validated"] is True
+    assert result["train_resolved"] == 2
+    assert result["validation_resolved"] == 2
+    assert result["threshold"] == 2.0
+    assert result["validation_metrics"]["production_accuracy"] == 0.0
+    assert result["validation_metrics"]["candidate_accuracy"] == 1.0
+    assert result["validation_metrics"]["lift"] == 1.0
+    assert result["validation_positive_lift"] is True
 
 
 def test_gax_promotion_requires_horizon_and_incremental_evidence() -> None:
