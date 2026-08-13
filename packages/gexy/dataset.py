@@ -7,6 +7,7 @@ from typing import Iterable
 from .calibration import ForecastLabel, make_label
 from .dynamic_features import DynamicFeatureRow
 from .replay import MarketSnapshot, build_forward_labels
+from .regime import regime_score
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class ResearchRow:
     estimated_hedge_demand: float
     positioning_confidence: float
     label: ForecastLabel
+    regime_score: float = 0.0
 
 
 def assemble_rows(
@@ -44,6 +46,11 @@ def assemble_rows(
         label = label_by_time.get(feature.timestamp)
         if label is None:
             continue
+        regime = regime_score(
+            signed_gex=feature.total_gex,
+            spot_change=feature.spot_change,
+            confidence=feature.positioning_confidence,
+        )
         result.append(
             ResearchRow(
                 timestamp=feature.timestamp,
@@ -57,6 +64,7 @@ def assemble_rows(
                 estimated_hedge_demand=feature.estimated_hedge_demand,
                 positioning_confidence=feature.positioning_confidence,
                 label=label,
+                regime_score=regime.score,
             )
         )
     return result
