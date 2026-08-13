@@ -18,6 +18,7 @@ on:
           - status
           - tests
           - preflight
+          - env-meta
           - capture-once
 
 jobs:
@@ -39,7 +40,7 @@ jobs:
             $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
             $command = "$content".Trim()
           }
-          $allowed = @('status','tests','preflight','capture-once')
+          $allowed = @('status','tests','preflight','env-meta','capture-once')
           if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
           "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         env:
@@ -66,6 +67,18 @@ jobs:
           if ($command -eq 'tests') {
             python -m pytest tests -q
             exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'env-meta') {
+            $envFile = Join-Path $repo '.env'
+            if (-not (Test-Path $envFile)) { throw '.env not found in EFI-AI repo' }
+            $keyLines = @(Get-Content $envFile | Where-Object { $_ -match '^APCA_API_KEY_ID=' })
+            $secretLines = @(Get-Content $envFile | Where-Object { $_ -match '^APCA_API_SECRET_KEY=' })
+            Write-Host "KEY LINE COUNT: $($keyLines.Count)"
+            Write-Host "SECRET LINE COUNT: $($secretLines.Count)"
+            if ($keyLines.Count -eq 1) { Write-Host "KEY VALUE LENGTH: $((($keyLines[0] -replace '^APCA_API_KEY_ID=','').Trim()).Length)" }
+            if ($secretLines.Count -eq 1) { Write-Host "SECRET VALUE LENGTH: $((($secretLines[0] -replace '^APCA_API_SECRET_KEY=','').Trim()).Length)" }
+            exit 0
           }
 
           if ($command -in @('preflight','capture-once')) {
