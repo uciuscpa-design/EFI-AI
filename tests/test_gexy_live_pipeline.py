@@ -33,6 +33,8 @@ def test_run_live_pipeline_emits_prediction() -> None:
     assert result.surface_features.positive_gamma_regime is True
     assert result.surface_features.flip_level is not None
     assert 7730 < result.surface_features.flip_level < 7740
+    assert result.gax_features.source == "gex_spatial_derivative_proxy_v1"
+    assert result.gax_features.magnitude >= 0
     assert result.prediction.direction == "down"
     assert result.prediction.primary_target == 7740
     assert result.prediction.horizon_minutes == 30
