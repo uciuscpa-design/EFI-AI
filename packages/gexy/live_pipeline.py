@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from .live_prediction import LivePrediction, predict_live
 from .market_adapter import MarketSnapshot
+from .multi_horizon import DEFAULT_HORIZONS, MultiHorizonPrediction, predict_multi_horizon
 from .option_surface import aggregate_surface
 from .surface_features import GEXSurfaceFeatures, GEXSurfacePoint, build_surface_features
 
@@ -13,6 +14,7 @@ class LivePipelineResult:
     snapshot: MarketSnapshot
     surface_features: GEXSurfaceFeatures
     prediction: LivePrediction
+    multi_horizon: MultiHorizonPrediction
 
 
 def surface_points_from_snapshot(snapshot: MarketSnapshot) -> tuple[GEXSurfacePoint, ...]:
@@ -31,13 +33,18 @@ def run_live_pipeline(
     *,
     horizon_minutes: int = 30,
 ) -> LivePipelineResult:
-    """Produce a deterministic live forecast from one normalized market snapshot.
+    """Produce single- and multi-horizon forecasts from one market snapshot.
 
-    The caller owns data acquisition and sign normalization. This keeps the core
-    prediction path independent of Alpaca while allowing AlpacaSpxSnapshotProvider
-    (or any future provider) to feed the exact same pipeline.
+    ``prediction`` remains the requested single-horizon result for backward
+    compatibility. ``multi_horizon`` evaluates the standard 5/15/30/60 minute
+    windows from the exact same surface; a custom requested horizon is added if
+    it is not already present in that standard bundle.
     """
     points = surface_points_from_snapshot(snapshot)
     features = build_surface_features(points, spot=snapshot.spot)
     prediction = predict_live(features, horizon_minutes=horizon_minutes)
-    return LivePipelineResult(snapshot, features, prediction)
+    horizons = DEFAULT_HORIZONS
+    if horizon_minutes not in horizons:
+        horizons = (*horizons, horizon_minutes)
+    multi_horizon = predict_multi_horizon(features, horizons=horizons)
+    return LivePipelineResult(snapshot, features, prediction, multi_horizon)
