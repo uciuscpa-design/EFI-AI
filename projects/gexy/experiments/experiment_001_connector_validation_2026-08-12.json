@@ -1,0 +1,28 @@
+{
+  "experiment": "gexy_experiment_001",
+  "validation_date": "2026-08-12",
+  "source": "connected_alpaca_app",
+  "underlying": "SPX",
+  "expiration": "2026-08-21",
+  "strike_range": [7650, 7850],
+  "option_chain_records": 82,
+  "contract_records": 164,
+  "quote_feed": "indicative",
+  "quote_timestamp_cluster_utc": "2026-08-12T19:59:59Z",
+  "open_interest_date": "2026-08-10",
+  "provider_iv_available": false,
+  "provider_greeks_available": false,
+  "combined_open_interest_examples": {
+    "7700": {"call_spx_plus_spxw": 15699, "put_spx_plus_spxw": 6858},
+    "7750": {"call_spx_plus_spxw": 17270, "put_spx_plus_spxw": 6776},
+    "7775": {"call_spx_plus_spxw": 12115, "put_spx_plus_spxw": 630},
+    "7800": {"call_spx_plus_spxw": 17042, "put_spx_plus_spxw": 6547},
+    "7850": {"call_spx_plus_spxw": 8252, "put_spx_plus_spxw": 235}
+  },
+  "notes": [
+    "Connected Alpaca app access is working independently of local PowerShell credentials.",
+    "Indicative chain quotes are available but IV/Greeks are absent, so GEXY must derive them.",
+    "SPX and SPXW contract metadata are both present and should be aggregated under the SPX underlying.",
+    "This is an end-of-session validation snapshot and must not be scored as a fresh intraday prediction."
+  ]
+}
