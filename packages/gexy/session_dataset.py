@@ -21,7 +21,8 @@ class SessionResearchRow:
     estimated_hedge_demand: float
     positioning_confidence: float
     gamma_flip_distance: float | None
-    label: ForecastLabel
+    regime_score: float = 0.0
+    label: ForecastLabel | None = None
 
 
 def _first_future(records: list[RecordedSnapshot], index: int, horizon_minutes: int) -> RecordedSnapshot | None:
@@ -67,6 +68,7 @@ def build_session_rows(
         if current.iv is not None and previous.iv is not None:
             iv_change = current.iv - previous.iv
 
+        current_regime = float(current.regime_score) if current.regime_score is not None else 0.0
         for horizon in horizons_minutes:
             future = _first_future(ordered, i, horizon)
             if future is None:
@@ -85,6 +87,7 @@ def build_session_rows(
                     estimated_hedge_demand=float(current.hedge_demand),
                     positioning_confidence=float(current.positioning_confidence),
                     gamma_flip_distance=current.gamma_flip_distance,
+                    regime_score=current_regime,
                     label=make_label(current.spot, future.spot, horizon),
                 )
             )
