@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from packages.gexy.gax_features import GAXFeatures
 from packages.gexy.gax_shadow_journal import append_gax_shadow, make_gax_shadow_record
-from packages.gexy.gax_shadow_report import build_gax_shadow_report
+from packages.gexy.gax_shadow_report import _promotion_recommendation, build_gax_shadow_report
 from packages.gexy.live_prediction import LivePrediction
 from packages.gexy.prediction_journal import append_entry, make_entry, resolve_entry, rewrite_entries
 
@@ -67,3 +67,23 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
     assert set(report["by_model_version"]) == {"gexy-live-v1", "gexy-live-v2-shadow"}
     assert report["by_horizon"]["5"]["resolved"] == 1
     assert report["by_model_version"]["gexy-live-v2-shadow"]["mean_magnitude"] == 2.0
+    assert report["promotion_recommendation"]["eligible"] is False
+    assert report["promotion_recommendation"]["reason"] == "insufficient_overall_samples"
+
+
+def test_gax_promotion_requires_all_horizons_to_clear_thresholds() -> None:
+    report = {
+        "overall": {"resolved": 250, "bias_alignment_accuracy": 0.60},
+        "by_horizon": {
+            str(horizon): {"resolved": 60, "bias_alignment_accuracy": 0.58}
+            for horizon in (5, 15, 30, 60)
+        },
+    }
+    decision = _promotion_recommendation(report)
+    assert decision["eligible"] is True
+    assert decision["reason"] == "shadow_evidence_clears_promotion_gate"
+
+    report["by_horizon"]["60"]["resolved"] = 49
+    decision = _promotion_recommendation(report)
+    assert decision["eligible"] is False
+    assert decision["reason"] == "insufficient_horizon_evidence"
