@@ -15,6 +15,7 @@ DEFAULT_MIN_CANDIDATE_OVERRIDES = 25
 DEFAULT_MIN_CANDIDATE_LIFT = 0.01
 DEFAULT_TRAIN_FRACTION = 0.70
 DEFAULT_MIN_VALIDATION_RESOLVED = 50
+DEFAULT_WALK_FORWARD_FOLDS = 3
 
 
 def build_shadow_candidate_sweep_by_model_version(
@@ -89,6 +90,40 @@ def select_best_shadow_candidate(
     }
 
 
+def _paired_resolved_entries(
+    entries: Iterable[PredictionJournalEntry],
+    shadows: Iterable[GAXShadowRecord],
+) -> tuple[list[PredictionJournalEntry], dict[str, GAXShadowRecord]]:
+    shadow_by_id = {shadow.prediction_id: shadow for shadow in shadows}
+    paired_entries = sorted(
+        (
+            entry
+            for entry in entries
+            if entry.resolved and entry.prediction_id in shadow_by_id
+        ),
+        key=lambda entry: entry.created_at,
+    )
+    return paired_entries, shadow_by_id
+
+
+def _candidate_sweep(
+    entries: list[PredictionJournalEntry],
+    shadow_by_id: dict[str, GAXShadowRecord],
+) -> dict[str, dict[str, object]]:
+    ids = {entry.prediction_id for entry in entries}
+    shadows = [shadow for prediction_id, shadow in shadow_by_id.items() if prediction_id in ids]
+    return {
+        str(threshold): asdict(
+            score_shadow_candidate(
+                entries,
+                shadows,
+                min_gax_magnitude=threshold,
+            )
+        )
+        for threshold in DEFAULT_SHADOW_THRESHOLDS
+    }
+
+
 def validate_shadow_candidate_out_of_sample(
     entries: Iterable[PredictionJournalEntry],
     shadows: Iterable[GAXShadowRecord],
@@ -99,23 +134,11 @@ def validate_shadow_candidate_out_of_sample(
     min_train_lift: float = DEFAULT_MIN_CANDIDATE_LIFT,
     min_validation_resolved: int = DEFAULT_MIN_VALIDATION_RESOLVED,
 ) -> dict[str, object]:
-    """Select on earlier resolved forecasts and validate on later unseen forecasts.
-
-    The chronological split prevents threshold selection from using validation
-    outcomes. This is advisory evaluation only and cannot change production.
-    """
+    """Select on earlier resolved forecasts and validate on later unseen forecasts."""
     if not 0.0 < train_fraction < 1.0:
         raise ValueError("train_fraction must be between 0 and 1")
 
-    shadow_by_id = {shadow.prediction_id: shadow for shadow in shadows}
-    paired_entries = sorted(
-        (
-            entry
-            for entry in entries
-            if entry.resolved and entry.prediction_id in shadow_by_id
-        ),
-        key=lambda entry: entry.created_at,
-    )
+    paired_entries, shadow_by_id = _paired_resolved_entries(entries, shadows)
     if len(paired_entries) < 2:
         return {
             "validated": False,
@@ -127,24 +150,9 @@ def validate_shadow_candidate_out_of_sample(
     split_index = max(1, min(split_index, len(paired_entries) - 1))
     train_entries = paired_entries[:split_index]
     validation_entries = paired_entries[split_index:]
-    train_ids = {entry.prediction_id for entry in train_entries}
-    validation_ids = {entry.prediction_id for entry in validation_entries}
-    shadow_list = list(shadow_by_id.values())
-    train_shadows = [shadow for shadow in shadow_list if shadow.prediction_id in train_ids]
-    validation_shadows = [shadow for shadow in shadow_list if shadow.prediction_id in validation_ids]
 
-    train_sweep = {
-        str(threshold): asdict(
-            score_shadow_candidate(
-                train_entries,
-                train_shadows,
-                min_gax_magnitude=threshold,
-            )
-        )
-        for threshold in DEFAULT_SHADOW_THRESHOLDS
-    }
     selection = select_best_shadow_candidate(
-        train_sweep,
+        _candidate_sweep(train_entries, shadow_by_id),
         min_resolved=min_train_resolved,
         min_overrides=min_train_overrides,
         min_lift=min_train_lift,
@@ -169,6 +177,11 @@ def validate_shadow_candidate_out_of_sample(
         }
 
     threshold = float(selection["threshold"])
+    validation_ids = {entry.prediction_id for entry in validation_entries}
+    validation_shadows = [
+        shadow for prediction_id, shadow in shadow_by_id.items()
+        if prediction_id in validation_ids
+    ]
     validation_metrics = asdict(
         score_shadow_candidate(
             validation_entries,
@@ -188,15 +201,115 @@ def validate_shadow_candidate_out_of_sample(
     }
 
 
+def validate_shadow_candidate_walk_forward(
+    entries: Iterable[PredictionJournalEntry],
+    shadows: Iterable[GAXShadowRecord],
+    *,
+    folds: int = DEFAULT_WALK_FORWARD_FOLDS,
+    min_train_resolved: int = DEFAULT_MIN_CANDIDATE_RESOLVED,
+    min_train_overrides: int = DEFAULT_MIN_CANDIDATE_OVERRIDES,
+    min_train_lift: float = DEFAULT_MIN_CANDIDATE_LIFT,
+    min_validation_resolved: int = DEFAULT_MIN_VALIDATION_RESOLVED,
+) -> dict[str, object]:
+    """Run expanding-window forward validation across multiple unseen blocks.
+
+    Each fold chooses its threshold only from data available before that fold's
+    validation window. Production predictions are never changed.
+    """
+    if folds < 2:
+        raise ValueError("folds must be at least 2")
+
+    paired_entries, shadow_by_id = _paired_resolved_entries(entries, shadows)
+    minimum_total = min_train_resolved + folds * min_validation_resolved
+    if len(paired_entries) < minimum_total:
+        return {
+            "validated": False,
+            "reason": "insufficient_samples_for_walk_forward",
+            "paired_resolved": len(paired_entries),
+            "min_required": minimum_total,
+            "folds_requested": folds,
+        }
+
+    validation_block = min_validation_resolved
+    first_validation_start = len(paired_entries) - folds * validation_block
+    fold_results: list[dict[str, object]] = []
+
+    for fold_index in range(folds):
+        validation_start = first_validation_start + fold_index * validation_block
+        validation_end = validation_start + validation_block
+        train_entries = paired_entries[:validation_start]
+        validation_entries = paired_entries[validation_start:validation_end]
+
+        selection = select_best_shadow_candidate(
+            _candidate_sweep(train_entries, shadow_by_id),
+            min_resolved=min_train_resolved,
+            min_overrides=min_train_overrides,
+            min_lift=min_train_lift,
+        )
+        if not bool(selection.get("recommended")):
+            fold_results.append({
+                "fold": fold_index + 1,
+                "validated": False,
+                "reason": "no_training_candidate",
+                "train_resolved": len(train_entries),
+                "validation_resolved": len(validation_entries),
+                "training_selection": selection,
+            })
+            continue
+
+        threshold = float(selection["threshold"])
+        validation_ids = {entry.prediction_id for entry in validation_entries}
+        validation_shadows = [
+            shadow for prediction_id, shadow in shadow_by_id.items()
+            if prediction_id in validation_ids
+        ]
+        metrics = asdict(
+            score_shadow_candidate(
+                validation_entries,
+                validation_shadows,
+                min_gax_magnitude=threshold,
+            )
+        )
+        fold_results.append({
+            "fold": fold_index + 1,
+            "validated": True,
+            "reason": "candidate_scored_on_forward_fold",
+            "train_resolved": len(train_entries),
+            "validation_resolved": len(validation_entries),
+            "threshold": threshold,
+            "training_selection": selection,
+            "validation_metrics": metrics,
+            "positive_lift": float(metrics.get("lift", 0.0)) > 0.0,
+        })
+
+    validated_folds = [result for result in fold_results if bool(result.get("validated"))]
+    lifts = [
+        float(result["validation_metrics"].get("lift", 0.0))
+        for result in validated_folds
+        if isinstance(result.get("validation_metrics"), dict)
+    ]
+    positive_folds = sum(1 for lift in lifts if lift > 0.0)
+    return {
+        "validated": len(validated_folds) == folds,
+        "reason": (
+            "all_walk_forward_folds_scored"
+            if len(validated_folds) == folds
+            else "one_or_more_walk_forward_folds_lacked_training_candidate"
+        ),
+        "folds_requested": folds,
+        "folds_scored": len(validated_folds),
+        "positive_lift_folds": positive_folds,
+        "mean_validation_lift": sum(lifts) / len(lifts) if lifts else 0.0,
+        "all_folds_positive_lift": bool(lifts) and positive_folds == len(lifts),
+        "folds": fold_results,
+    }
+
+
 def build_consolidated_shadow_v2_report(
     prediction_journal: str | Path,
     gax_shadow_journal: str | Path,
 ) -> dict[str, object]:
-    """Compose the existing GAX shadow report with conservative v2 evaluation.
-
-    This is read-only evaluation. It never changes production predictions or
-    promotes GAX into the live model.
-    """
+    """Compose the existing GAX shadow report with conservative v2 evaluation."""
     from .gax_shadow_report import build_gax_shadow_report
 
     entries = load_entries(prediction_journal)
@@ -212,6 +325,10 @@ def build_consolidated_shadow_v2_report(
         for version, sweep in by_version.items()
     }
     report["shadow_candidate_out_of_sample"] = validate_shadow_candidate_out_of_sample(
+        entries,
+        shadows,
+    )
+    report["shadow_candidate_walk_forward"] = validate_shadow_candidate_walk_forward(
         entries,
         shadows,
     )
