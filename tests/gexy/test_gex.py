@@ -28,10 +28,10 @@ def test_scenario_gex_changes_with_spot(options: list[OptionContract]) -> None:
     assert all(isinstance(value, float) for value in result.values())
 
 
-def test_negative_dealer_gamma_requires_buying_on_down_move(options: list[OptionContract]) -> None:
+def test_negative_dealer_gamma_requires_selling_on_down_move(options: list[OptionContract]) -> None:
     pressure = estimate_hedge_pressure(options, 6500, price_change=-10)
-    assert pressure.estimated_hedge_demand > 0
-    assert pressure.direction == "buy_underlying"
+    assert pressure.estimated_hedge_demand < 0
+    assert pressure.direction == "sell_underlying"
 
 
 def test_invalid_spot_is_rejected(options: list[OptionContract]) -> None:
