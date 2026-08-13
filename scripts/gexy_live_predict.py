@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 
 from packages.gexy.alpaca_live import predict_from_alpaca
+from packages.gexy.gax_shadow_journal import append_gax_shadow, make_gax_shadow_record
 from packages.gexy.prediction_journal import append_entry, make_entry
 
 
@@ -34,7 +35,12 @@ def main() -> int:
         default="data/gexy/live_predictions.jsonl",
         help="append-only JSONL path for successful predictions",
     )
-    parser.add_argument("--no-journal", action="store_true", help="do not persist predictions")
+    parser.add_argument(
+        "--gax-shadow-journal",
+        default="data/gexy/gax_shadow.jsonl",
+        help="append-only JSONL path for experimental GAX shadow observations",
+    )
+    parser.add_argument("--no-journal", action="store_true", help="do not persist predictions or GAX shadow records")
     args = parser.parse_args()
 
     if not _paper_key_shape_is_plausible():
@@ -66,18 +72,29 @@ def main() -> int:
 
     forecasts = result.pipeline.multi_horizon.predictions
     journal_path: str | None = None
+    gax_shadow_path: str | None = None
     if not args.no_journal:
         path = Path(args.journal)
+        shadow_path = Path(args.gax_shadow_journal)
         for prediction in forecasts:
-            append_entry(
-                path,
-                make_entry(
+            entry = make_entry(
+                created_at=result.timestamp,
+                spot=result.spot,
+                prediction=prediction,
+            )
+            append_entry(path, entry)
+            append_gax_shadow(
+                shadow_path,
+                make_gax_shadow_record(
+                    prediction_id=entry.prediction_id,
                     created_at=result.timestamp,
-                    spot=result.spot,
-                    prediction=prediction,
+                    horizon_minutes=prediction.horizon_minutes,
+                    model_version=entry.model_version,
+                    features=result.pipeline.gax_features,
                 ),
             )
         journal_path = str(path)
+        gax_shadow_path = str(shadow_path)
 
     payload = {
         "status": "ok",
@@ -89,9 +106,12 @@ def main() -> int:
             for prediction in forecasts
         },
         "surface": asdict(result.pipeline.surface_features),
+        "gax_shadow": asdict(result.pipeline.gax_features),
         "quote_count": len(result.quote_times),
         "journal_path": journal_path,
+        "gax_shadow_journal_path": gax_shadow_path,
         "journaled_forecasts": 0 if args.no_journal else len(forecasts),
+        "journaled_gax_shadows": 0 if args.no_journal else len(forecasts),
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
