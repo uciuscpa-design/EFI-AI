@@ -89,6 +89,16 @@ def _shadow_candidate_sweep(entries, shadows) -> dict[str, dict[str, object]]:
     }
 
 
+def _shadow_candidate_sweep_by_horizon(entries, shadows) -> dict[str, dict[str, dict[str, object]]]:
+    horizons = sorted({shadow.horizon_minutes for shadow in shadows})
+    report: dict[str, dict[str, dict[str, object]]] = {}
+    for horizon in horizons:
+        horizon_entries = [entry for entry in entries if entry.prediction.horizon_minutes == horizon]
+        horizon_shadows = [shadow for shadow in shadows if shadow.horizon_minutes == horizon]
+        report[str(horizon)] = _shadow_candidate_sweep(horizon_entries, horizon_shadows)
+    return report
+
+
 def _promotion_recommendation(
     report: dict[str, object],
     *,
@@ -185,6 +195,7 @@ def build_gax_shadow_report(
         "by_model_version": by_model_version,
         "incremental_value": _incremental_value(entries, shadows),
         "shadow_candidate_threshold_sweep": _shadow_candidate_sweep(entries, shadows),
+        "shadow_candidate_threshold_sweep_by_horizon": _shadow_candidate_sweep_by_horizon(entries, shadows),
     }
     report["promotion_recommendation"] = _promotion_recommendation(report)
     return report
