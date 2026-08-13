@@ -4,6 +4,7 @@ from packages.gexy.gax_features import GAXFeatures
 from packages.gexy.gax_shadow_candidate import score_shadow_candidate
 from packages.gexy.gax_shadow_journal import append_gax_shadow, make_gax_shadow_record
 from packages.gexy.gax_shadow_report import _promotion_recommendation, build_gax_shadow_report
+from packages.gexy.gax_shadow_version_sweep import build_shadow_candidate_sweep_by_model_version
 from packages.gexy.live_prediction import LivePrediction
 from packages.gexy.prediction_journal import append_entry, make_entry, resolve_entry, rewrite_entries
 
@@ -33,6 +34,7 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
     )
 
     entries = []
+    shadow_records = []
     for horizon, version in ((5, "gexy-live-v1"), (15, "gexy-live-v2-shadow")):
         entry = make_entry(
             created_at=t0,
@@ -41,23 +43,16 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
             model_version=version,
         )
         append_entry(predictions, entry)
-        append_gax_shadow(
-            shadows,
-            make_gax_shadow_record(
-                prediction_id=entry.prediction_id,
-                created_at=t0,
-                horizon_minutes=horizon,
-                model_version=version,
-                features=features,
-            ),
+        shadow = make_gax_shadow_record(
+            prediction_id=entry.prediction_id,
+            created_at=t0,
+            horizon_minutes=horizon,
+            model_version=version,
+            features=features,
         )
-        entries.append(
-            resolve_entry(
-                entry,
-                resolved_at=entry.due_at,
-                realized_spot=7752.0,
-            )
-        )
+        append_gax_shadow(shadows, shadow)
+        shadow_records.append(shadow)
+        entries.append(resolve_entry(entry, resolved_at=entry.due_at, realized_spot=7752.0))
 
     rewrite_entries(predictions, entries)
     report = build_gax_shadow_report(predictions, shadows)
@@ -72,10 +67,8 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
     assert report["incremental_value"]["agreement_count"] == 2
     assert report["incremental_value"]["disagreement_count"] == 0
     assert set(report["shadow_candidate_threshold_sweep"]) == {"0.0", "0.5", "1.0", "2.0"}
-    assert all(
-        metrics["lift"] == 0.0
-        for metrics in report["shadow_candidate_threshold_sweep"].values()
-    )
+    assert all(metrics["lift"] == 0.0 for metrics in report["shadow_candidate_threshold_sweep"].values())
+
     by_horizon = report["shadow_candidate_threshold_sweep_by_horizon"]
     assert set(by_horizon) == {"5", "15"}
     assert all(set(metrics) == {"0.0", "0.5", "1.0", "2.0"} for metrics in by_horizon.values())
@@ -84,6 +77,16 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
         for horizon_metrics in by_horizon.values()
         for threshold_metrics in horizon_metrics.values()
     )
+
+    by_version = build_shadow_candidate_sweep_by_model_version(entries, shadow_records)
+    assert set(by_version) == {"gexy-live-v1", "gexy-live-v2-shadow"}
+    assert all(set(metrics) == {"0.0", "0.5", "1.0", "2.0"} for metrics in by_version.values())
+    assert all(
+        threshold_metrics["resolved"] == 1
+        for version_metrics in by_version.values()
+        for threshold_metrics in version_metrics.values()
+    )
+
     assert report["promotion_recommendation"]["eligible"] is False
     assert report["promotion_recommendation"]["reason"] == "insufficient_overall_samples"
 
