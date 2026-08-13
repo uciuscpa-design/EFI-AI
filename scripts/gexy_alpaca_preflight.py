@@ -5,6 +5,8 @@ from urllib.error import HTTPError, URLError
 
 from packages.gexy.alpaca_provider import AlpacaHttpClient, DATA_BASE, PAPER_BASE
 
+LIVE_BASE = "https://api.alpaca.markets"
+
 
 def _check(name: str, fn) -> bool:
     try:
@@ -12,7 +14,7 @@ def _check(name: str, fn) -> bool:
     except HTTPError as exc:
         print(f"{name}: FAIL HTTP {exc.code}")
         if exc.code == 401:
-            print("  authentication rejected; verify the APCA paper key/secret pair")
+            print("  authentication rejected; verify the API key/secret pair and environment")
         elif exc.code == 403:
             print("  authenticated but access is forbidden for this endpoint/feed")
         return False
@@ -34,10 +36,16 @@ def main() -> int:
         return 2
 
     print("credentials: PRESENT")
-    trading_ok = _check(
+    paper_ok = _check(
         "paper trading auth",
         lambda: client.get(f"{PAPER_BASE}/v2/account"),
     )
+    if not paper_ok:
+        _check(
+            "live trading auth discriminator",
+            lambda: client.get(f"{LIVE_BASE}/v2/account"),
+        )
+
     data_ok = _check(
         "SPX indicative option data",
         lambda: client.get(
@@ -46,7 +54,7 @@ def main() -> int:
         ),
     )
 
-    if trading_ok and data_ok:
+    if paper_ok and data_ok:
         print("GEXY Alpaca preflight: PASS")
         return 0
     print("GEXY Alpaca preflight: FAIL")
