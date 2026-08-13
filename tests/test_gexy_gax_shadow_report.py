@@ -1,0 +1,69 @@
+from datetime import datetime, timezone
+
+from packages.gexy.gax_features import GAXFeatures
+from packages.gexy.gax_shadow_journal import append_gax_shadow, make_gax_shadow_record
+from packages.gexy.gax_shadow_report import build_gax_shadow_report
+from packages.gexy.live_prediction import LivePrediction
+from packages.gexy.prediction_journal import append_entry, make_entry, resolve_entry, rewrite_entries
+
+
+def _prediction(horizon: int) -> LivePrediction:
+    return LivePrediction(
+        direction="up",
+        expected_move_points=4.0,
+        primary_target=7754.0,
+        invalidation_level=7735.0,
+        confidence=0.6,
+        horizon_minutes=horizon,
+        regime="positive_gamma_mean_reversion",
+    )
+
+
+def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None:
+    predictions = tmp_path / "predictions.jsonl"
+    shadows = tmp_path / "gax.jsonl"
+    t0 = datetime(2026, 8, 13, 14, 0, tzinfo=timezone.utc)
+    features = GAXFeatures(
+        spot=7750.0,
+        local_gax=2.0,
+        local_gax_curvature=0.5,
+        magnitude=2.0,
+        acceleration_bias="up",
+    )
+
+    entries = []
+    for horizon, version in ((5, "gexy-live-v1"), (15, "gexy-live-v2-shadow")):
+        entry = make_entry(
+            created_at=t0,
+            spot=7750.0,
+            prediction=_prediction(horizon),
+            model_version=version,
+        )
+        append_entry(predictions, entry)
+        append_gax_shadow(
+            shadows,
+            make_gax_shadow_record(
+                prediction_id=entry.prediction_id,
+                created_at=t0,
+                horizon_minutes=horizon,
+                model_version=version,
+                features=features,
+            ),
+        )
+        entries.append(
+            resolve_entry(
+                entry,
+                resolved_at=entry.due_at,
+                realized_spot=7752.0,
+            )
+        )
+
+    rewrite_entries(predictions, entries)
+    report = build_gax_shadow_report(predictions, shadows)
+
+    assert report["overall"]["resolved"] == 2
+    assert report["overall"]["bias_alignment_accuracy"] == 1.0
+    assert set(report["by_horizon"]) == {"5", "15"}
+    assert set(report["by_model_version"]) == {"gexy-live-v1", "gexy-live-v2-shadow"}
+    assert report["by_horizon"]["5"]["resolved"] == 1
+    assert report["by_model_version"]["gexy-live-v2-shadow"]["mean_magnitude"] == 2.0
