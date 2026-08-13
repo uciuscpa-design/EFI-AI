@@ -14,20 +14,23 @@ def record_feature_state(
     feature_state: Any,
     source: str = "alpaca",
 ) -> None:
-    """Persist a feature-engine result without coupling the recorder to the engine model.
+    """Persist a feature-engine result into the canonical research recorder.
 
-    Attribute access is intentionally defensive so this bridge can accept the
-    current feature-state model and future compatible models. Missing derived
-    fields are recorded as null rather than fabricated.
+    Hedge demand and confidence live on ``feature_state.hedge_pressure`` in the
+    current feature model. Missing values remain null rather than being inferred.
     """
+    pressure = getattr(feature_state, "hedge_pressure", None)
+    hedge_demand = getattr(pressure, "total_pressure", None) if pressure is not None else None
+    positioning_confidence = getattr(pressure, "confidence", None) if pressure is not None else None
+
     recorder.append(
         RecordedSnapshot(
             timestamp=timestamp,
             spot=spot,
             total_gex=getattr(feature_state, "total_gex", None),
             gamma_flip=getattr(feature_state, "gamma_flip", None),
-            hedge_demand=getattr(feature_state, "hedge_demand", None),
-            positioning_confidence=getattr(feature_state, "positioning_confidence", None),
+            hedge_demand=hedge_demand,
+            positioning_confidence=positioning_confidence,
             data_quality=getattr(feature_state, "data_quality", "unknown"),
             source=source,
         )
