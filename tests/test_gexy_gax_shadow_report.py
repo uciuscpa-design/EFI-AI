@@ -76,6 +76,14 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
         metrics["lift"] == 0.0
         for metrics in report["shadow_candidate_threshold_sweep"].values()
     )
+    by_horizon = report["shadow_candidate_threshold_sweep_by_horizon"]
+    assert set(by_horizon) == {"5", "15"}
+    assert all(set(metrics) == {"0.0", "0.5", "1.0", "2.0"} for metrics in by_horizon.values())
+    assert all(
+        threshold_metrics["resolved"] == 1
+        for horizon_metrics in by_horizon.values()
+        for threshold_metrics in horizon_metrics.values()
+    )
     assert report["promotion_recommendation"]["eligible"] is False
     assert report["promotion_recommendation"]["reason"] == "insufficient_overall_samples"
 
