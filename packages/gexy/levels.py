@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .gex import calculate_gex
+from .gex import calculate_gex_by_strike
 from .models import OptionContract
 
 
@@ -15,7 +15,7 @@ class GammaLevels:
 
 
 def detect_levels(contracts: list[OptionContract], spot: float) -> GammaLevels:
-    snapshot = calculate_gex(contracts, spot=spot)
+    snapshot = calculate_gex_by_strike(contracts, spot=spot)
     ordered = sorted(snapshot.by_strike.items())
     if not ordered:
         return GammaLevels(None, None, None, {})
