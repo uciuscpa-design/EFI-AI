@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Iterable
 
-from .prediction_journal import JournalEntry
+from .prediction_journal import PredictionJournalEntry
 
 
 @dataclass(frozen=True)
@@ -17,12 +17,14 @@ class HorizonMetrics:
     calibration_gap: float
 
 
-def summarize_by_horizon(entries: Iterable[JournalEntry]) -> tuple[HorizonMetrics, ...]:
-    grouped: dict[int, list[JournalEntry]] = defaultdict(list)
+def summarize_by_horizon(
+    entries: Iterable[PredictionJournalEntry],
+) -> tuple[HorizonMetrics, ...]:
+    grouped: dict[int, list[PredictionJournalEntry]] = defaultdict(list)
     for entry in entries:
         if not entry.resolved:
             continue
-        grouped[entry.horizon_minutes].append(entry)
+        grouped[entry.prediction.horizon_minutes].append(entry)
 
     output: list[HorizonMetrics] = []
     for horizon in sorted(grouped):
@@ -30,7 +32,7 @@ def summarize_by_horizon(entries: Iterable[JournalEntry]) -> tuple[HorizonMetric
         count = len(rows)
         accuracy = sum(1.0 for row in rows if row.directional_hit) / count
         mae = sum(float(row.absolute_error_points or 0.0) for row in rows) / count
-        confidence = sum(row.confidence for row in rows) / count
+        confidence = sum(row.prediction.confidence for row in rows) / count
         output.append(
             HorizonMetrics(
                 horizon_minutes=horizon,
