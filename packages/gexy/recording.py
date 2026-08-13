@@ -32,6 +32,7 @@ class RecordedSnapshot:
     vanna_pressure: float | None = None
     charm_pressure: float | None = None
     positioning_confidence: float | None = None
+    regime_score: float | None = None
     data_quality: str = "unknown"
     source: str = "unknown"
 
@@ -66,3 +67,10 @@ class JsonlRecorder:
                 payload = json.loads(line)
                 payload["timestamp"] = datetime.fromisoformat(payload["timestamp"])
                 yield RecordedSnapshot(**payload)
+
+    def latest(self) -> RecordedSnapshot | None:
+        """Return the most recent persisted snapshot, if any."""
+        latest_snapshot = None
+        for snapshot in self.read():
+            latest_snapshot = snapshot
+        return latest_snapshot
