@@ -7,6 +7,7 @@ from packages.gexy.gax_shadow_report import _promotion_recommendation, build_gax
 from packages.gexy.gax_shadow_version_sweep import (
     build_consolidated_shadow_v2_report,
     build_shadow_candidate_sweep_by_model_version,
+    select_best_shadow_candidate,
 )
 from packages.gexy.live_prediction import LivePrediction
 from packages.gexy.prediction_journal import append_entry, make_entry, resolve_entry, rewrite_entries
@@ -97,9 +98,56 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
     }
     assert consolidated["overall"]["resolved"] == report["overall"]["resolved"]
     assert consolidated["promotion_recommendation"] == report["promotion_recommendation"]
+    assert consolidated["shadow_candidate_recommendation"]["recommended"] is False
+    assert all(
+        recommendation["recommended"] is False
+        for recommendation in consolidated["shadow_candidate_recommendation_by_model_version"].values()
+    )
 
     assert report["promotion_recommendation"]["eligible"] is False
     assert report["promotion_recommendation"]["reason"] == "insufficient_overall_samples"
+
+
+def test_shadow_candidate_selector_requires_samples_overrides_and_lift() -> None:
+    weak = {
+        "0.0": {
+            "resolved": 99,
+            "overrides": 30,
+            "production_accuracy": 0.50,
+            "candidate_accuracy": 0.60,
+            "lift": 0.10,
+        }
+    }
+    decision = select_best_shadow_candidate(weak)
+    assert decision["recommended"] is False
+
+    sweep = {
+        "0.5": {
+            "resolved": 120,
+            "overrides": 30,
+            "production_accuracy": 0.50,
+            "candidate_accuracy": 0.53,
+            "lift": 0.03,
+        },
+        "1.0": {
+            "resolved": 120,
+            "overrides": 25,
+            "production_accuracy": 0.50,
+            "candidate_accuracy": 0.53,
+            "lift": 0.03,
+        },
+        "2.0": {
+            "resolved": 120,
+            "overrides": 20,
+            "production_accuracy": 0.50,
+            "candidate_accuracy": 0.55,
+            "lift": 0.05,
+        },
+    }
+    decision = select_best_shadow_candidate(sweep)
+    assert decision["recommended"] is True
+    assert decision["threshold"] == 1.0
+    assert decision["lift"] == 0.03
 
 
 def test_gax_promotion_requires_horizon_and_incremental_evidence() -> None:
