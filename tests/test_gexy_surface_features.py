@@ -1,3 +1,5 @@
+import pytest
+
 from packages.gexy.surface_features import (
     GEXSurfacePoint,
     build_surface_features,
@@ -35,8 +37,8 @@ def test_build_surface_features_finds_walls_and_regime() -> None:
     assert features.upper_wall == 7760
     assert features.distance_to_flip is not None
     assert features.distance_to_flip > 0
-    assert features.distance_to_lower_wall == 9.2
-    assert features.distance_to_upper_wall == 10.8
+    assert features.distance_to_lower_wall == pytest.approx(9.2)
+    assert features.distance_to_upper_wall == pytest.approx(10.8)
     assert features.local_gex == 168.0
     assert features.positive_gamma_regime is True
     assert features.hedge_acceleration != 0
