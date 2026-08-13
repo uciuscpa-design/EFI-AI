@@ -1,0 +1,87 @@
+name: GEXY Windows Bridge
+
+on:
+  push:
+    branches:
+      - feature/gexy
+    paths:
+      - .gexy-trigger/command.txt
+  workflow_dispatch:
+    inputs:
+      command:
+        description: Controlled GEXY action
+        required: true
+        default: status
+        type: choice
+        options:
+          - status
+          - tests
+          - preflight
+          - capture-once
+
+jobs:
+  gexy:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Resolve command
+        id: resolve
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $command = '${{ inputs.command }}'
+          } else {
+            $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
+            $command = "$content".Trim()
+          }
+          $allowed = @('status','tests','preflight','capture-once')
+          if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
+          "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run controlled GEXY action
+        run: |
+          $repo = 'C:\Users\shannon\Documents\EFI-AI'
+          if (-not (Test-Path $repo)) { throw "EFI-AI repo not found at $repo" }
+          Set-Location $repo
+
+          $command = '${{ steps.resolve.outputs.command }}'
+          Write-Host "GEXY bridge command: $command"
+          Write-Host "Working directory: $repo"
+          git branch --show-current
+          git status --short
+
+          if ($command -eq 'status') {
+            python --version
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'tests') {
+            python -m pytest tests -q
+            exit $LASTEXITCODE
+          }
+
+          if ($command -in @('preflight','capture-once')) {
+            $envFile = Join-Path $repo '.env'
+            if (-not (Test-Path $envFile)) { throw '.env not found in EFI-AI repo' }
+            foreach ($line in Get-Content $envFile) {
+              if ($line -match '^APCA_API_KEY_ID=(.*)$') { $env:APCA_API_KEY_ID = $Matches[1].Trim().Trim('"').Trim("'") }
+              elseif ($line -match '^APCA_API_SECRET_KEY=(.*)$') { $env:APCA_API_SECRET_KEY = $Matches[1].Trim().Trim('"').Trim("'") }
+            }
+            if (-not $env:APCA_API_KEY_ID -or -not $env:APCA_API_SECRET_KEY) { throw 'Alpaca credentials missing from .env' }
+          }
+
+          if ($command -eq 'preflight') {
+            python scripts\gexy_alpaca_preflight.py
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'capture-once') {
+            python scripts\gexy_experiment_001.py --once
+            exit $LASTEXITCODE
+          }
