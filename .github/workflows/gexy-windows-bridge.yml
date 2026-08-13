@@ -93,7 +93,20 @@ jobs:
 
           if ($command -eq 'preflight') {
             python scripts\gexy_alpaca_preflight.py
-            exit $LASTEXITCODE
+            $paperExit = $LASTEXITCODE
+            if ($paperExit -ne 0) {
+              try {
+                Invoke-RestMethod -Method Get -Uri 'https://api.alpaca.markets/v2/account' -Headers @{
+                  'APCA-API-KEY-ID' = $env:APCA_API_KEY_ID
+                  'APCA-API-SECRET-KEY' = $env:APCA_API_SECRET_KEY
+                } | Out-Null
+                Write-Host 'live trading auth discriminator: OK'
+              } catch {
+                $code = $_.Exception.Response.StatusCode.value__
+                Write-Host "live trading auth discriminator: FAIL HTTP $code"
+              }
+            }
+            exit $paperExit
           }
 
           if ($command -eq 'capture-once') {
