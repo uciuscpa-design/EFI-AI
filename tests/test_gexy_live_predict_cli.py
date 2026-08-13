@@ -1,5 +1,14 @@
 import importlib.util
+import json
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
+
+from packages.gexy.live_prediction import LivePrediction
+from packages.gexy.multi_horizon import MultiHorizonPrediction
+from packages.gexy.prediction_journal import load_entries
+from packages.gexy.surface_features import GEXSurfaceFeatures
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "gexy_live_predict.py"
@@ -20,3 +29,52 @@ def test_paper_key_shape_accepts_plausible_pk(monkeypatch):
     meta = MODULE._credential_meta()
     assert meta["key_prefix"] == "PK"
     assert meta["key_length"] == 20
+
+
+def _prediction(horizon: int) -> LivePrediction:
+    return LivePrediction(
+        direction="down",
+        expected_move_points=-3.0,
+        primary_target=7740.0,
+        invalidation_level=7733.6,
+        confidence=0.6,
+        horizon_minutes=horizon,
+        regime="positive_gamma_mean_reversion",
+    )
+
+
+def test_main_emits_and_journals_multi_horizon_bundle(monkeypatch, tmp_path, capsys):
+    forecasts = tuple(_prediction(horizon) for horizon in (5, 15, 30, 60))
+    surface = GEXSurfaceFeatures(
+        spot=7749.2,
+        flip_level=7733.6,
+        lower_wall=7740.0,
+        upper_wall=7760.0,
+        distance_to_flip=15.6,
+        distance_to_lower_wall=9.2,
+        distance_to_upper_wall=10.8,
+        local_gex=168.0,
+        local_gex_slope=7.15,
+        positive_gamma_regime=True,
+        hedge_acceleration=169.9,
+    )
+    fake_result = SimpleNamespace(
+        timestamp=datetime(2026, 8, 13, 13, 0, tzinfo=timezone.utc),
+        spot=7749.2,
+        quote_times=(),
+        pipeline=SimpleNamespace(
+            prediction=forecasts[2],
+            multi_horizon=MultiHorizonPrediction(forecasts),
+            surface_features=surface,
+        ),
+    )
+    monkeypatch.setenv("APCA_API_KEY_ID", "PK123456789012345678")
+    monkeypatch.setattr(MODULE, "predict_from_alpaca", lambda **_: fake_result)
+    journal = tmp_path / "live_predictions.jsonl"
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT), "--journal", str(journal)])
+
+    assert MODULE.main() == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert set(payload["predictions_by_horizon"]) == {"5", "15", "30", "60"}
+    assert payload["journaled_forecasts"] == 4
+    assert len(load_entries(journal)) == 4
