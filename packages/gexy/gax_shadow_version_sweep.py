@@ -19,6 +19,24 @@ DEFAULT_WALK_FORWARD_FOLDS = 3
 DEFAULT_MIN_MEAN_FORWARD_LIFT = 0.01
 
 
+def _score_sweep(
+    entries: Iterable[PredictionJournalEntry],
+    shadows: Iterable[GAXShadowRecord],
+) -> dict[str, dict[str, object]]:
+    entry_list = list(entries)
+    shadow_list = list(shadows)
+    return {
+        str(threshold): asdict(
+            score_shadow_candidate(
+                entry_list,
+                shadow_list,
+                min_gax_magnitude=threshold,
+            )
+        )
+        for threshold in DEFAULT_SHADOW_THRESHOLDS
+    }
+
+
 def build_shadow_candidate_sweep_by_model_version(
     entries: Iterable[PredictionJournalEntry],
     shadows: Iterable[GAXShadowRecord],
@@ -31,16 +49,30 @@ def build_shadow_candidate_sweep_by_model_version(
     for version in versions:
         version_entries = [entry for entry in entry_list if entry.model_version == version]
         version_shadows = [shadow for shadow in shadow_list if shadow.model_version == version]
-        report[version] = {
-            str(threshold): asdict(
-                score_shadow_candidate(
-                    version_entries,
-                    version_shadows,
-                    min_gax_magnitude=threshold,
-                )
-            )
-            for threshold in DEFAULT_SHADOW_THRESHOLDS
-        }
+        report[version] = _score_sweep(version_entries, version_shadows)
+
+    return report
+
+
+def build_shadow_candidate_sweep_by_regime(
+    entries: Iterable[PredictionJournalEntry],
+    shadows: Iterable[GAXShadowRecord],
+) -> dict[str, dict[str, dict[str, object]]]:
+    """Score fixed GAX thresholds independently inside each production regime."""
+    entry_list = list(entries)
+    shadow_by_id = {shadow.prediction_id: shadow for shadow in shadows}
+    regimes = sorted({entry.prediction.regime for entry in entry_list})
+    report: dict[str, dict[str, dict[str, object]]] = {}
+
+    for regime in regimes:
+        regime_entries = [entry for entry in entry_list if entry.prediction.regime == regime]
+        regime_ids = {entry.prediction_id for entry in regime_entries}
+        regime_shadows = [
+            shadow
+            for prediction_id, shadow in shadow_by_id.items()
+            if prediction_id in regime_ids
+        ]
+        report[regime] = _score_sweep(regime_entries, regime_shadows)
 
     return report
 
@@ -104,12 +136,7 @@ def _candidate_sweep(
 ) -> dict[str, dict[str, object]]:
     ids = {entry.prediction_id for entry in entries}
     shadows = [shadow for prediction_id, shadow in shadow_by_id.items() if prediction_id in ids]
-    return {
-        str(threshold): asdict(
-            score_shadow_candidate(entries, shadows, min_gax_magnitude=threshold)
-        )
-        for threshold in DEFAULT_SHADOW_THRESHOLDS
-    }
+    return _score_sweep(entries, shadows)
 
 
 def validate_shadow_candidate_out_of_sample(
@@ -226,9 +253,12 @@ def build_consolidated_shadow_v2_report(
     shadows = load_gax_shadows(gax_shadow_journal)
     report = build_gax_shadow_report(prediction_journal, gax_shadow_journal)
     by_version = build_shadow_candidate_sweep_by_model_version(entries, shadows)
+    by_regime = build_shadow_candidate_sweep_by_regime(entries, shadows)
     report["shadow_candidate_threshold_sweep_by_model_version"] = by_version
+    report["shadow_candidate_threshold_sweep_by_regime"] = by_regime
     report["shadow_candidate_recommendation"] = select_best_shadow_candidate(report["shadow_candidate_threshold_sweep"])
     report["shadow_candidate_recommendation_by_model_version"] = {version: select_best_shadow_candidate(sweep) for version, sweep in by_version.items()}
+    report["shadow_candidate_recommendation_by_regime"] = {regime: select_best_shadow_candidate(sweep) for regime, sweep in by_regime.items()}
     report["shadow_candidate_out_of_sample"] = validate_shadow_candidate_out_of_sample(entries, shadows)
     report["shadow_candidate_walk_forward"] = validate_shadow_candidate_walk_forward(entries, shadows)
     return report
