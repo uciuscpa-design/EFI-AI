@@ -65,6 +65,8 @@ jobs:
           }
 
           if ($command -eq 'tests') {
+            git pull --ff-only origin feature/gexy
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             python -m pytest tests -q
             exit $LASTEXITCODE
           }
