@@ -1,5 +1,7 @@
+import pytest
+
 from packages.gexy.gax_features import build_gax_features
-from packages.gexy.surface_features import GEXSurfacePoint
+from packages.gexy.surface_features import GEXSurfacePoint, build_surface_features
 
 
 def test_gax_proxy_tracks_local_gex_slope() -> None:
@@ -37,3 +39,16 @@ def test_gax_proxy_neutral_for_flat_curve() -> None:
     assert features.local_gax == 0.0
     assert features.local_gax_curvature == 0.0
     assert features.acceleration_bias == "neutral"
+
+
+def test_gax_v1_matches_legacy_hedge_acceleration_without_double_counting() -> None:
+    points = (
+        GEXSurfacePoint(7730, -104.0),
+        GEXSurfacePoint(7740, 183.0),
+        GEXSurfacePoint(7750, 168.0),
+        GEXSurfacePoint(7760, 326.0),
+    )
+    spot = 7749.2
+    gax = build_gax_features(points, spot=spot)
+    gex = build_surface_features(points, spot=spot)
+    assert gax.local_gax == pytest.approx(gex.hedge_acceleration)
