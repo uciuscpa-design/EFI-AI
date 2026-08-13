@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from packages.gexy.dynamic_features import build_dynamic_row
 
 
@@ -19,6 +21,6 @@ def test_dynamic_row_calculates_changes() -> None:
         elapsed_minutes=5,
     )
     assert row.spot_change == 5
-    assert row.iv_change == 0.01
+    assert row.iv_change == pytest.approx(0.01)
     assert row.gamma_change == 20
     assert row.positioning_confidence == 1.0
