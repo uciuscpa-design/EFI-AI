@@ -58,7 +58,6 @@ def build_shadow_candidate_sweep_by_regime(
     entries: Iterable[PredictionJournalEntry],
     shadows: Iterable[GAXShadowRecord],
 ) -> dict[str, dict[str, dict[str, object]]]:
-    """Score fixed GAX thresholds independently inside each production regime."""
     entry_list = list(entries)
     shadow_by_id = {shadow.prediction_id: shadow for shadow in shadows}
     regimes = sorted({entry.prediction.regime for entry in entry_list})
@@ -67,11 +66,7 @@ def build_shadow_candidate_sweep_by_regime(
     for regime in regimes:
         regime_entries = [entry for entry in entry_list if entry.prediction.regime == regime]
         regime_ids = {entry.prediction_id for entry in regime_entries}
-        regime_shadows = [
-            shadow
-            for prediction_id, shadow in shadow_by_id.items()
-            if prediction_id in regime_ids
-        ]
+        regime_shadows = [shadow for prediction_id, shadow in shadow_by_id.items() if prediction_id in regime_ids]
         report[regime] = _score_sweep(regime_entries, regime_shadows)
 
     return report
@@ -90,8 +85,7 @@ def select_best_shadow_candidate(
         overrides = int(metrics.get("overrides", 0))
         lift = float(metrics.get("lift", 0.0))
         if resolved >= min_resolved and overrides >= min_overrides and lift >= min_lift:
-            threshold = float(threshold_text)
-            eligible.append((lift, threshold, metrics))
+            eligible.append((lift, float(threshold_text), metrics))
 
     if not eligible:
         return {
@@ -243,6 +237,28 @@ def validate_shadow_candidate_walk_forward(
     }
 
 
+def validate_shadow_candidate_by_regime(
+    entries: Iterable[PredictionJournalEntry],
+    shadows: Iterable[GAXShadowRecord],
+) -> dict[str, dict[str, object]]:
+    """Run holdout and walk-forward validation independently per production regime."""
+    entry_list = list(entries)
+    shadow_by_id = {shadow.prediction_id: shadow for shadow in shadows}
+    regimes = sorted({entry.prediction.regime for entry in entry_list})
+    report: dict[str, dict[str, object]] = {}
+
+    for regime in regimes:
+        regime_entries = [entry for entry in entry_list if entry.prediction.regime == regime]
+        regime_ids = {entry.prediction_id for entry in regime_entries}
+        regime_shadows = [shadow for prediction_id, shadow in shadow_by_id.items() if prediction_id in regime_ids]
+        report[regime] = {
+            "out_of_sample": validate_shadow_candidate_out_of_sample(regime_entries, regime_shadows),
+            "walk_forward": validate_shadow_candidate_walk_forward(regime_entries, regime_shadows),
+        }
+
+    return report
+
+
 def build_consolidated_shadow_v2_report(
     prediction_journal: str | Path,
     gax_shadow_journal: str | Path,
@@ -261,4 +277,5 @@ def build_consolidated_shadow_v2_report(
     report["shadow_candidate_recommendation_by_regime"] = {regime: select_best_shadow_candidate(sweep) for regime, sweep in by_regime.items()}
     report["shadow_candidate_out_of_sample"] = validate_shadow_candidate_out_of_sample(entries, shadows)
     report["shadow_candidate_walk_forward"] = validate_shadow_candidate_walk_forward(entries, shadows)
+    report["shadow_candidate_forward_validation_by_regime"] = validate_shadow_candidate_by_regime(entries, shadows)
     return report
