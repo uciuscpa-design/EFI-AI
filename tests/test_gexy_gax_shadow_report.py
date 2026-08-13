@@ -7,11 +7,11 @@ from packages.gexy.live_prediction import LivePrediction
 from packages.gexy.prediction_journal import append_entry, make_entry, resolve_entry, rewrite_entries
 
 
-def _prediction(horizon: int) -> LivePrediction:
+def _prediction(horizon: int, direction: str = "up") -> LivePrediction:
     return LivePrediction(
-        direction="up",
-        expected_move_points=4.0,
-        primary_target=7754.0,
+        direction=direction,
+        expected_move_points=4.0 if direction == "up" else -4.0,
+        primary_target=7754.0 if direction == "up" else 7746.0,
         invalidation_level=7735.0,
         confidence=0.6,
         horizon_minutes=horizon,
@@ -67,16 +67,23 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
     assert set(report["by_model_version"]) == {"gexy-live-v1", "gexy-live-v2-shadow"}
     assert report["by_horizon"]["5"]["resolved"] == 1
     assert report["by_model_version"]["gexy-live-v2-shadow"]["mean_magnitude"] == 2.0
+    assert report["incremental_value"]["paired_resolved"] == 2
+    assert report["incremental_value"]["agreement_count"] == 2
+    assert report["incremental_value"]["disagreement_count"] == 0
     assert report["promotion_recommendation"]["eligible"] is False
     assert report["promotion_recommendation"]["reason"] == "insufficient_overall_samples"
 
 
-def test_gax_promotion_requires_all_horizons_to_clear_thresholds() -> None:
+def test_gax_promotion_requires_horizon_and_incremental_evidence() -> None:
     report = {
         "overall": {"resolved": 250, "bias_alignment_accuracy": 0.60},
         "by_horizon": {
             str(horizon): {"resolved": 60, "bias_alignment_accuracy": 0.58}
             for horizon in (5, 15, 30, 60)
+        },
+        "incremental_value": {
+            "disagreement_count": 60,
+            "gax_win_rate_on_disagreement": 0.60,
         },
     }
     decision = _promotion_recommendation(report)
@@ -87,3 +94,15 @@ def test_gax_promotion_requires_all_horizons_to_clear_thresholds() -> None:
     decision = _promotion_recommendation(report)
     assert decision["eligible"] is False
     assert decision["reason"] == "insufficient_horizon_evidence"
+
+    report["by_horizon"]["60"]["resolved"] = 60
+    report["incremental_value"]["disagreement_count"] = 49
+    decision = _promotion_recommendation(report)
+    assert decision["eligible"] is False
+    assert decision["reason"] == "insufficient_incremental_disagreement_samples"
+
+    report["incremental_value"]["disagreement_count"] = 60
+    report["incremental_value"]["gax_win_rate_on_disagreement"] = 0.54
+    decision = _promotion_recommendation(report)
+    assert decision["eligible"] is False
+    assert decision["reason"] == "insufficient_incremental_lift"
