@@ -36,9 +36,21 @@ def _ordered(points: Sequence[GEXSurfacePoint]) -> tuple[GEXSurfacePoint, ...]:
     return ordered
 
 
-def estimate_flip_level(points: Sequence[GEXSurfacePoint]) -> float | None:
-    """Linearly interpolate the nearest strike where signed GEX crosses zero."""
+def estimate_flip_level(
+    points: Sequence[GEXSurfacePoint],
+    *,
+    reference_level: float | None = None,
+) -> float | None:
+    """Linearly interpolate a signed-GEX zero crossing.
+
+    If multiple crossings exist, choose the one nearest ``reference_level``.
+    Callers that omit the reference retain the historical behavior of using the
+    center of the sampled strike range.
+    """
     ordered = _ordered(points)
+    if reference_level is not None and reference_level <= 0:
+        raise ValueError("reference_level must be positive")
+
     candidates: list[float] = []
     for left, right in zip(ordered, ordered[1:]):
         if left.signed_gex == 0:
@@ -53,8 +65,13 @@ def estimate_flip_level(points: Sequence[GEXSurfacePoint]) -> float | None:
             candidates.append(left.strike + span * weight)
     if not candidates:
         return None
-    center = (ordered[0].strike + ordered[-1].strike) / 2.0
-    return min(candidates, key=lambda level: abs(level - center))
+
+    reference = (
+        float(reference_level)
+        if reference_level is not None
+        else (ordered[0].strike + ordered[-1].strike) / 2.0
+    )
+    return min(candidates, key=lambda level: abs(level - reference))
 
 
 def _nearest_index(points: Sequence[GEXSurfacePoint], spot: float) -> int:
@@ -97,7 +114,7 @@ def build_surface_features(
         right = ordered[index + 1]
         slope = (right.signed_gex - left.signed_gex) / (right.strike - left.strike)
 
-    flip = estimate_flip_level(ordered)
+    flip = estimate_flip_level(ordered, reference_level=spot)
     scale = max(abs(point.signed_gex) for point in ordered) or 1.0
     hedge_acceleration = slope * spot / scale
 
