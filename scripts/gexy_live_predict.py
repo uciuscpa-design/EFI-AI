@@ -28,13 +28,13 @@ def _paper_key_shape_is_plausible() -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run one live GEXY SPX prediction from Alpaca data")
-    parser.add_argument("--horizon", type=int, default=30, help="forecast horizon in minutes")
+    parser.add_argument("--horizon", type=int, default=30, help="primary forecast horizon in minutes")
     parser.add_argument(
         "--journal",
         default="data/gexy/live_predictions.jsonl",
         help="append-only JSONL path for successful predictions",
     )
-    parser.add_argument("--no-journal", action="store_true", help="do not persist this prediction")
+    parser.add_argument("--no-journal", action="store_true", help="do not persist predictions")
     args = parser.parse_args()
 
     if not _paper_key_shape_is_plausible():
@@ -64,24 +64,34 @@ def main() -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 2
 
+    forecasts = result.pipeline.multi_horizon.predictions
     journal_path: str | None = None
     if not args.no_journal:
-        entry = make_entry(
-            created_at=result.timestamp,
-            spot=result.spot,
-            prediction=result.pipeline.prediction,
-        )
-        append_entry(Path(args.journal), entry)
-        journal_path = str(Path(args.journal))
+        path = Path(args.journal)
+        for prediction in forecasts:
+            append_entry(
+                path,
+                make_entry(
+                    created_at=result.timestamp,
+                    spot=result.spot,
+                    prediction=prediction,
+                ),
+            )
+        journal_path = str(path)
 
     payload = {
         "status": "ok",
         "timestamp": result.timestamp.isoformat(),
         "spot": result.spot,
         "prediction": asdict(result.pipeline.prediction),
+        "predictions_by_horizon": {
+            str(prediction.horizon_minutes): asdict(prediction)
+            for prediction in forecasts
+        },
         "surface": asdict(result.pipeline.surface_features),
         "quote_count": len(result.quote_times),
         "journal_path": journal_path,
+        "journaled_forecasts": 0 if args.no_journal else len(forecasts),
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
