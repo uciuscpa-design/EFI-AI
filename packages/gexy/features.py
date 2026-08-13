@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from .data import FeatureSnapshot
-from .gex import calculate_gex
+from .gex import calculate_gex_by_strike
 from .hedge import estimate_hedge_pressure
 from .levels import detect_levels
 from .models import OptionContract
@@ -36,7 +36,7 @@ def build_feature_vector(
     """Build a point-in-time feature vector without using future observations."""
     if not 0.0 <= positioning_confidence <= 1.0:
         raise ValueError("positioning_confidence must be between 0 and 1")
-    gex = calculate_gex(contracts, spot=snapshot.spx.price)
+    gex = calculate_gex_by_strike(contracts, spot=snapshot.spx.price)
     levels = detect_levels(contracts, snapshot.spx.price)
     pressure = estimate_hedge_pressure(
         contracts,
