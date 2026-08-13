@@ -9,12 +9,16 @@ from typing import Iterable
 from .live_prediction import LivePrediction
 
 
+LIVE_MODEL_VERSION = "gexy-live-v1"
+
+
 @dataclass(frozen=True)
 class PredictionJournalEntry:
     prediction_id: str
     created_at: datetime
     spot: float
     prediction: LivePrediction
+    model_version: str = LIVE_MODEL_VERSION
     resolved_at: datetime | None = None
     realized_spot: float | None = None
     realized_move_points: float | None = None
@@ -30,22 +34,37 @@ class PredictionJournalEntry:
         return self.resolved_at is not None
 
 
-def _prediction_id(created_at: datetime, spot: float, prediction: LivePrediction) -> str:
+def _prediction_id(
+    created_at: datetime,
+    spot: float,
+    prediction: LivePrediction,
+    model_version: str,
+) -> str:
     stamp = created_at.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     direction = prediction.direction.lower()
-    return f"{stamp}-{spot:.2f}-{prediction.horizon_minutes}m-{direction}"
+    return f"{stamp}-{spot:.2f}-{prediction.horizon_minutes}m-{direction}-{model_version}"
 
 
-def make_entry(*, created_at: datetime, spot: float, prediction: LivePrediction) -> PredictionJournalEntry:
+def make_entry(
+    *,
+    created_at: datetime,
+    spot: float,
+    prediction: LivePrediction,
+    model_version: str = LIVE_MODEL_VERSION,
+) -> PredictionJournalEntry:
     if created_at.tzinfo is None:
         raise ValueError('created_at must be timezone-aware')
     if spot <= 0:
         raise ValueError('spot must be positive')
+    version = model_version.strip()
+    if not version:
+        raise ValueError('model_version must not be empty')
     return PredictionJournalEntry(
-        prediction_id=_prediction_id(created_at, spot, prediction),
+        prediction_id=_prediction_id(created_at, spot, prediction, version),
         created_at=created_at,
         spot=float(spot),
         prediction=prediction,
+        model_version=version,
     )
 
 
@@ -65,6 +84,7 @@ def _deserialize(payload: dict[str, object]) -> PredictionJournalEntry:
         created_at=datetime.fromisoformat(str(payload['created_at'])),
         spot=float(payload['spot']),
         prediction=LivePrediction(**prediction_payload),
+        model_version=str(payload.get('model_version') or LIVE_MODEL_VERSION),
         resolved_at=None if payload.get('resolved_at') is None else datetime.fromisoformat(str(payload['resolved_at'])),
         realized_spot=None if payload.get('realized_spot') is None else float(payload['realized_spot']),
         realized_move_points=None if payload.get('realized_move_points') is None else float(payload['realized_move_points']),
@@ -114,6 +134,7 @@ def resolve_entry(entry: PredictionJournalEntry, *, resolved_at: datetime, reali
         created_at=entry.created_at,
         spot=entry.spot,
         prediction=entry.prediction,
+        model_version=entry.model_version,
         resolved_at=resolved_at,
         realized_spot=float(realized_spot),
         realized_move_points=realized_move,
