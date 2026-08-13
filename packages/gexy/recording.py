@@ -11,16 +11,26 @@ from typing import Iterable, Iterator
 class RecordedSnapshot:
     """Point-in-time GEXY research record.
 
-    The recorder stores raw normalized inputs and derived values together so a
-    prediction can be reproduced later. Credentials and provider secrets must
-    never be included in the payload.
+    The recorder stores normalized inputs and derived values together so a
+    prediction can be reproduced later. Fields added over time are optional so
+    older JSONL experiment files remain readable. Credentials and provider
+    secrets must never be included in the payload.
     """
 
     timestamp: datetime
     spot: float
+    iv: float | None = None
     total_gex: float | None = None
+    total_vanna: float | None = None
+    total_charm: float | None = None
     gamma_flip: float | None = None
+    gamma_flip_distance: float | None = None
+    call_wall: float | None = None
+    put_wall: float | None = None
     hedge_demand: float | None = None
+    gamma_pressure: float | None = None
+    vanna_pressure: float | None = None
+    charm_pressure: float | None = None
     positioning_confidence: float | None = None
     data_quality: str = "unknown"
     source: str = "unknown"
