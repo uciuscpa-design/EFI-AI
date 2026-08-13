@@ -69,3 +69,30 @@ def test_horizon_report_groups_resolved_forecasts(tmp_path) -> None:
         assert metrics["resolved"] == 1
         assert metrics["directional_accuracy"] == 1.0
         assert metrics["mean_confidence"] == 0.6
+
+
+def test_horizon_report_separates_model_versions(tmp_path) -> None:
+    path = tmp_path / "journal.jsonl"
+    t0 = datetime(2026, 8, 13, 14, 0, tzinfo=timezone.utc)
+    first = make_entry(
+        created_at=t0,
+        spot=7750.0,
+        prediction=_prediction(horizon_minutes=5),
+        model_version="gexy-live-v1",
+    )
+    second = make_entry(
+        created_at=t0.replace(minute=1),
+        spot=7750.0,
+        prediction=_prediction(horizon_minutes=5),
+        model_version="gexy-live-v2-shadow",
+    )
+    resolved = [
+        resolve_entry(first, resolved_at=first.due_at, realized_spot=7756.0),
+        resolve_entry(second, resolved_at=second.due_at, realized_spot=7748.0),
+    ]
+    rewrite_entries(path, resolved)
+
+    report = build_journal_horizon_report(path)
+    assert set(report["by_model_version"]) == {"gexy-live-v1", "gexy-live-v2-shadow"}
+    assert report["by_model_version"]["gexy-live-v1"]["directional_accuracy"] == 1.0
+    assert report["by_model_version"]["gexy-live-v2-shadow"]["directional_accuracy"] == 0.0
