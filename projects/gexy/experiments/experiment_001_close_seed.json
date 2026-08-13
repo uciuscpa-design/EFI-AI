@@ -1,0 +1,64 @@
+{
+  "experiment": "GEXY-001",
+  "kind": "real_close_seed",
+  "underlying": "SPX",
+  "option_root": "SPX",
+  "expiration": "2026-08-21",
+  "option_feed": "alpaca_indicative",
+  "quote_timestamp_utc": "2026-08-12T19:59:59Z",
+  "open_interest_date": "2026-08-10",
+  "contract_multiplier": 100,
+  "forward_reference_method": "call_put_parity_midpoints_discount_ignored_for_seed",
+  "forward_reference": 7752.84,
+  "time_to_expiry_years_assumed": 0.0246575342,
+  "records": [
+    {
+      "strike": 7700,
+      "call_bid": 79.55,
+      "call_ask": 81.37,
+      "put_bid": 27.25,
+      "put_ask": 27.98,
+      "call_open_interest": 12896,
+      "put_open_interest": 5255,
+      "parity_forward": 7752.845,
+      "derived_iv": 0.102537,
+      "derived_gamma": 0.00291018,
+      "call_gex_magnitude_billions": 2.25578,
+      "put_gex_magnitude_billions": 0.91921
+    },
+    {
+      "strike": 7750,
+      "call_bid": 47.35,
+      "call_ask": 47.52,
+      "put_bid": 43.88,
+      "put_ask": 45.03,
+      "call_open_interest": 15076,
+      "put_open_interest": 5370,
+      "parity_forward": 7752.98,
+      "derived_iv": 0.094734,
+      "derived_gamma": 0.00345737,
+      "call_gex_magnitude_billions": 3.13295,
+      "put_gex_magnitude_billions": 1.11594
+    },
+    {
+      "strike": 7800,
+      "call_bid": 24.45,
+      "call_ask": 26.13,
+      "put_bid": 70.82,
+      "put_ask": 74.39,
+      "call_open_interest": 14102,
+      "put_open_interest": 6320,
+      "parity_forward": 7752.685,
+      "derived_iv": 0.09236,
+      "derived_gamma": 0.00326083,
+      "call_gex_magnitude_billions": 2.76395,
+      "put_gex_magnitude_billions": 1.23870
+    }
+  ],
+  "notes": [
+    "GEX values are unsigned magnitudes; dealer inventory sign is not observed from open interest.",
+    "Alpaca indicative chain returned no provider IV or Greeks, so IV and gamma are derived from quote midpoints.",
+    "This close snapshot is a seed/validation record and is not scored on 1-60 minute intraday returns because option quoting had reached the regular-session close.",
+    "SPXW should be added to the production aggregate; this seed intentionally isolates SPX root for reproducibility."
+  ]
+}
