@@ -6,6 +6,7 @@ on:
       - feature/gexy
     paths:
       - .gexy-trigger/command.txt
+      - .github/workflows/gexy-windows-bridge.yml
   workflow_dispatch:
     inputs:
       command:
@@ -49,6 +50,7 @@ jobs:
           $repo = 'C:\Users\shannon\Documents\EFI-AI'
           if (-not (Test-Path $repo)) { throw "EFI-AI repo not found at $repo" }
           Set-Location $repo
+          $env:PYTHONPATH = $repo
 
           $command = '${{ steps.resolve.outputs.command }}'
           Write-Host "GEXY bridge command: $command"
