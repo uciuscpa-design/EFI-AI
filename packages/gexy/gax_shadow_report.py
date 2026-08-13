@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
+from .gax_shadow_candidate import score_shadow_candidate
 from .gax_shadow_journal import index_gax_shadows, load_gax_shadows, summarize_gax_shadow
 from .prediction_journal import load_entries
 
@@ -13,6 +14,7 @@ DEFAULT_MIN_HORIZON_RESOLVED = 50
 DEFAULT_REQUIRED_HORIZONS = (5, 15, 30, 60)
 DEFAULT_MIN_DISAGREEMENTS = 50
 DEFAULT_MIN_GAX_WIN_RATE_ON_DISAGREEMENT = 0.55
+DEFAULT_SHADOW_THRESHOLDS = (0.0, 0.5, 1.0, 2.0)
 
 
 def _direction_from_move(move: float) -> str:
@@ -75,6 +77,15 @@ def _incremental_value(entries, shadows) -> dict[str, object]:
         "gax_win_rate_on_disagreement": (
             gax_disagreement_wins / disagreement_count if disagreement_count else 0.0
         ),
+    }
+
+
+def _shadow_candidate_sweep(entries, shadows) -> dict[str, dict[str, object]]:
+    return {
+        str(threshold): asdict(
+            score_shadow_candidate(entries, shadows, min_gax_magnitude=threshold)
+        )
+        for threshold in DEFAULT_SHADOW_THRESHOLDS
     }
 
 
@@ -156,23 +167,15 @@ def build_gax_shadow_report(
 
     by_horizon: dict[str, dict[str, object]] = {}
     for horizon in horizons:
-        horizon_entries = [
-            entry for entry in entries if entry.prediction.horizon_minutes == horizon
-        ]
-        horizon_shadows = [
-            shadow for shadow in shadows if shadow.horizon_minutes == horizon
-        ]
-        by_horizon[str(horizon)] = asdict(
-            summarize_gax_shadow(horizon_entries, horizon_shadows)
-        )
+        horizon_entries = [entry for entry in entries if entry.prediction.horizon_minutes == horizon]
+        horizon_shadows = [shadow for shadow in shadows if shadow.horizon_minutes == horizon]
+        by_horizon[str(horizon)] = asdict(summarize_gax_shadow(horizon_entries, horizon_shadows))
 
     by_model_version: dict[str, dict[str, object]] = {}
     for version in versions:
         version_entries = [entry for entry in entries if entry.model_version == version]
         version_shadows = [shadow for shadow in shadows if shadow.model_version == version]
-        by_model_version[version] = asdict(
-            summarize_gax_shadow(version_entries, version_shadows)
-        )
+        by_model_version[version] = asdict(summarize_gax_shadow(version_entries, version_shadows))
 
     report: dict[str, object] = {
         "prediction_journal_path": str(Path(prediction_journal)),
@@ -181,6 +184,7 @@ def build_gax_shadow_report(
         "by_horizon": by_horizon,
         "by_model_version": by_model_version,
         "incremental_value": _incremental_value(entries, shadows),
+        "shadow_candidate_threshold_sweep": _shadow_candidate_sweep(entries, shadows),
     }
     report["promotion_recommendation"] = _promotion_recommendation(report)
     return report
