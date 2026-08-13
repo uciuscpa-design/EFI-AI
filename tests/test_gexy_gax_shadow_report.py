@@ -4,7 +4,10 @@ from packages.gexy.gax_features import GAXFeatures
 from packages.gexy.gax_shadow_candidate import score_shadow_candidate
 from packages.gexy.gax_shadow_journal import append_gax_shadow, make_gax_shadow_record
 from packages.gexy.gax_shadow_report import _promotion_recommendation, build_gax_shadow_report
-from packages.gexy.gax_shadow_version_sweep import build_shadow_candidate_sweep_by_model_version
+from packages.gexy.gax_shadow_version_sweep import (
+    build_consolidated_shadow_v2_report,
+    build_shadow_candidate_sweep_by_model_version,
+)
 from packages.gexy.live_prediction import LivePrediction
 from packages.gexy.prediction_journal import append_entry, make_entry, resolve_entry, rewrite_entries
 
@@ -86,6 +89,14 @@ def test_gax_shadow_report_groups_by_horizon_and_model_version(tmp_path) -> None
         for version_metrics in by_version.values()
         for threshold_metrics in version_metrics.values()
     )
+
+    consolidated = build_consolidated_shadow_v2_report(predictions, shadows)
+    assert set(consolidated["shadow_candidate_threshold_sweep_by_model_version"]) == {
+        "gexy-live-v1",
+        "gexy-live-v2-shadow",
+    }
+    assert consolidated["overall"]["resolved"] == report["overall"]["resolved"]
+    assert consolidated["promotion_recommendation"] == report["promotion_recommendation"]
 
     assert report["promotion_recommendation"]["eligible"] is False
     assert report["promotion_recommendation"]["reason"] == "insufficient_overall_samples"
