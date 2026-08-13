@@ -24,8 +24,9 @@ on:
 
 jobs:
   gexy:
+    if: github.actor == 'uciuscpa-design' && github.repository == 'uciuscpa-design/EFI-AI'
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       contents: read
     defaults:
