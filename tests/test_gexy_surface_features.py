@@ -18,6 +18,17 @@ def test_estimate_flip_level_interpolates_zero_crossing() -> None:
     assert 7735 < flip < 7740
 
 
+def test_estimate_flip_level_can_choose_crossing_nearest_reference() -> None:
+    points = (
+        GEXSurfacePoint(7700, -100.0),
+        GEXSurfacePoint(7710, 100.0),
+        GEXSurfacePoint(7790, 100.0),
+        GEXSurfacePoint(7800, -100.0),
+    )
+    assert estimate_flip_level(points, reference_level=7798.0) == pytest.approx(7795.0)
+    assert estimate_flip_level(points, reference_level=7702.0) == pytest.approx(7705.0)
+
+
 def test_build_surface_features_finds_walls_and_regime() -> None:
     points = (
         GEXSurfacePoint(7705, -82.0),
@@ -42,3 +53,15 @@ def test_build_surface_features_finds_walls_and_regime() -> None:
     assert features.local_gex == 168.0
     assert features.positive_gamma_regime is True
     assert features.hedge_acceleration != 0
+
+
+def test_build_surface_features_uses_flip_nearest_spot() -> None:
+    points = (
+        GEXSurfacePoint(7700, -100.0),
+        GEXSurfacePoint(7710, 100.0),
+        GEXSurfacePoint(7790, 100.0),
+        GEXSurfacePoint(7800, -100.0),
+    )
+    features = build_surface_features(points, spot=7798.0)
+    assert features.flip_level == pytest.approx(7795.0)
+    assert features.distance_to_flip == pytest.approx(3.0)
