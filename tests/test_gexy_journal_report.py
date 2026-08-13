@@ -2,19 +2,24 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from packages.gexy.journal_horizon_report import build_journal_horizon_report
 from packages.gexy.journal_report import build_journal_report
 from packages.gexy.live_prediction import LivePrediction
 from packages.gexy.prediction_journal import append_entry, make_entry, resolve_entry, rewrite_entries
 
 
-def _prediction(regime: str = "positive_gamma_mean_reversion") -> LivePrediction:
+def _prediction(
+    regime: str = "positive_gamma_mean_reversion",
+    *,
+    horizon_minutes: int = 30,
+) -> LivePrediction:
     return LivePrediction(
         direction="up",
         expected_move_points=5.0,
         primary_target=7755.0,
         invalidation_level=7735.0,
         confidence=0.6,
-        horizon_minutes=30,
+        horizon_minutes=horizon_minutes,
         regime=regime,
     )
 
@@ -42,3 +47,25 @@ def test_report_summarizes_pending_and_resolved(tmp_path) -> None:
     assert report["summary"]["directional_accuracy"] == 1.0
     assert report["next_due_at"] == second.due_at.isoformat()
     assert set(report["by_regime"]) == {"negative_gamma_acceleration", "positive_gamma_mean_reversion"}
+
+
+def test_horizon_report_groups_resolved_forecasts(tmp_path) -> None:
+    path = tmp_path / "journal.jsonl"
+    t0 = datetime(2026, 8, 13, 14, 0, tzinfo=timezone.utc)
+    entries = [
+        make_entry(created_at=t0, spot=7750.0, prediction=_prediction(horizon_minutes=horizon))
+        for horizon in (5, 15, 30, 60)
+    ]
+    resolved = [
+        resolve_entry(entry, resolved_at=entry.due_at, realized_spot=7757.0)
+        for entry in entries
+    ]
+    rewrite_entries(path, resolved)
+
+    report = build_journal_horizon_report(path)
+    assert report["summary"]["resolved"] == 4
+    assert set(report["by_horizon"]) == {"5", "15", "30", "60"}
+    for metrics in report["by_horizon"].values():
+        assert metrics["resolved"] == 1
+        assert metrics["directional_accuracy"] == 1.0
+        assert metrics["mean_confidence"] == 0.6
