@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+from packages.gexy.gax_features import GAXFeatures
+from packages.gexy.gax_shadow_journal import load_gax_shadows
 from packages.gexy.live_prediction import LivePrediction
 from packages.gexy.multi_horizon import MultiHorizonPrediction
 from packages.gexy.prediction_journal import load_entries
@@ -58,6 +60,13 @@ def test_main_emits_and_journals_multi_horizon_bundle(monkeypatch, tmp_path, cap
         positive_gamma_regime=True,
         hedge_acceleration=169.9,
     )
+    gax = GAXFeatures(
+        spot=7749.2,
+        local_gax=169.9,
+        local_gax_curvature=-12.5,
+        magnitude=169.9,
+        acceleration_bias="up",
+    )
     fake_result = SimpleNamespace(
         timestamp=datetime(2026, 8, 13, 13, 0, tzinfo=timezone.utc),
         spot=7749.2,
@@ -66,15 +75,27 @@ def test_main_emits_and_journals_multi_horizon_bundle(monkeypatch, tmp_path, cap
             prediction=forecasts[2],
             multi_horizon=MultiHorizonPrediction(forecasts),
             surface_features=surface,
+            gax_features=gax,
         ),
     )
     monkeypatch.setenv("APCA_API_KEY_ID", "PK123456789012345678")
     monkeypatch.setattr(MODULE, "predict_from_alpaca", lambda **_: fake_result)
     journal = tmp_path / "live_predictions.jsonl"
-    monkeypatch.setattr(sys, "argv", [str(SCRIPT), "--journal", str(journal)])
+    shadow = tmp_path / "gax_shadow.jsonl"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [str(SCRIPT), "--journal", str(journal), "--gax-shadow-journal", str(shadow)],
+    )
 
     assert MODULE.main() == 0
     payload = json.loads(capsys.readouterr().out)
     assert set(payload["predictions_by_horizon"]) == {"5", "15", "30", "60"}
+    assert payload["gax_shadow"]["source"] == "gex_spatial_derivative_proxy_v1"
     assert payload["journaled_forecasts"] == 4
-    assert len(load_entries(journal)) == 4
+    assert payload["journaled_gax_shadows"] == 4
+    entries = load_entries(journal)
+    shadows = load_gax_shadows(shadow)
+    assert len(entries) == 4
+    assert len(shadows) == 4
+    assert {item.prediction_id for item in shadows} == {entry.prediction_id for entry in entries}
