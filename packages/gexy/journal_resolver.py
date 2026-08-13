@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
-from .prediction_journal import JournalSummary, PredictionJournal, summarize_records
+from .prediction_journal import (
+    JournalSummary,
+    load_entries,
+    resolve_entry,
+    rewrite_entries,
+    summarize_entries,
+)
 
 
 @dataclass(frozen=True)
@@ -20,34 +26,42 @@ def resolve_due_predictions(
     observation_time: datetime,
     observed_spot: float,
 ) -> ResolveResult:
-    """Resolve journal entries whose forecast horizon has elapsed.
+    """Resolve pending predictions whose forecast horizon has elapsed.
 
-    The supplied observation is only applied to pending predictions with
-    timestamp + horizon <= observation_time. Future/pending records are left
-    untouched. This keeps resolution causal and avoids premature labeling.
+    One observation may resolve multiple due entries. Future entries and entries
+    that are already resolved are preserved unchanged. The observation timestamp
+    must be timezone-aware so horizon comparisons remain unambiguous.
     """
+    if observation_time.tzinfo is None:
+        raise ValueError("observation_time must be timezone-aware")
     if observed_spot <= 0:
         raise ValueError("observed_spot must be positive")
-    if observation_time.tzinfo is None:
-        observation_time = observation_time.replace(tzinfo=timezone.utc)
 
-    journal = PredictionJournal(journal_path)
-    records = journal.read_all()
+    observation_time = observation_time.astimezone(timezone.utc)
+    entries = load_entries(journal_path)
+    updated = []
     due_count = 0
     resolved_count = 0
 
-    for record in records:
-        if record.resolved_spot is not None:
+    for entry in entries:
+        if entry.resolved or entry.due_at > observation_time:
+            updated.append(entry)
             continue
-        due_at = record.timestamp + timedelta(minutes=record.horizon_minutes)
-        if due_at <= observation_time:
-            due_count += 1
-            journal.resolve(record.id, resolved_spot=observed_spot, resolved_at=observation_time)
-            resolved_count += 1
+        due_count += 1
+        updated.append(
+            resolve_entry(
+                entry,
+                resolved_at=observation_time,
+                realized_spot=observed_spot,
+            )
+        )
+        resolved_count += 1
 
-    refreshed = journal.read_all()
+    if resolved_count:
+        rewrite_entries(journal_path, updated)
+
     return ResolveResult(
         due_count=due_count,
         resolved_count=resolved_count,
-        summary=summarize_records(refreshed),
+        summary=summarize_entries(updated),
     )
