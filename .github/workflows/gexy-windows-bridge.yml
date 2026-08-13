@@ -21,6 +21,7 @@ on:
           - env-meta
           - capture-once
           - live-predict
+          - journal-report
 
 jobs:
   gexy:
@@ -42,7 +43,7 @@ jobs:
             $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
             $command = "$content".Trim()
           }
-          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict')
+          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','journal-report')
           if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
           "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         env:
@@ -66,10 +67,18 @@ jobs:
             exit $LASTEXITCODE
           }
 
-          if ($command -eq 'tests') {
+          if ($command -in @('tests','journal-report')) {
             git pull --ff-only origin feature/gexy
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          if ($command -eq 'tests') {
             python -m pytest tests -q
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'journal-report') {
+            python scripts\gexy_journal_report.py
             exit $LASTEXITCODE
           }
 
