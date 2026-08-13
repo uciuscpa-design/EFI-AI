@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from packages.gexy.gax_features import GAXFeatures
+from packages.gexy.gax_shadow_candidate import score_shadow_candidate
 from packages.gexy.gax_shadow_journal import append_gax_shadow, make_gax_shadow_record
 from packages.gexy.gax_shadow_report import _promotion_recommendation, build_gax_shadow_report
 from packages.gexy.live_prediction import LivePrediction
@@ -106,3 +107,54 @@ def test_gax_promotion_requires_horizon_and_incremental_evidence() -> None:
     decision = _promotion_recommendation(report)
     assert decision["eligible"] is False
     assert decision["reason"] == "insufficient_incremental_lift"
+
+
+def test_shadow_candidate_measures_lift_without_changing_production() -> None:
+    t0 = datetime(2026, 8, 13, 14, 0, tzinfo=timezone.utc)
+    entry = make_entry(created_at=t0, spot=7750.0, prediction=_prediction(5, "down"))
+    resolved = resolve_entry(entry, resolved_at=entry.due_at, realized_spot=7752.0)
+    shadow = make_gax_shadow_record(
+        prediction_id=entry.prediction_id,
+        created_at=t0,
+        horizon_minutes=5,
+        model_version=entry.model_version,
+        features=GAXFeatures(
+            spot=7750.0,
+            local_gax=2.0,
+            local_gax_curvature=0.5,
+            magnitude=2.0,
+            acceleration_bias="up",
+        ),
+    )
+
+    metrics = score_shadow_candidate([resolved], [shadow])
+    assert metrics.resolved == 1
+    assert metrics.overrides == 1
+    assert metrics.production_accuracy == 0.0
+    assert metrics.candidate_accuracy == 1.0
+    assert metrics.lift == 1.0
+
+
+def test_shadow_candidate_respects_magnitude_threshold() -> None:
+    t0 = datetime(2026, 8, 13, 14, 0, tzinfo=timezone.utc)
+    entry = make_entry(created_at=t0, spot=7750.0, prediction=_prediction(5, "down"))
+    resolved = resolve_entry(entry, resolved_at=entry.due_at, realized_spot=7748.0)
+    shadow = make_gax_shadow_record(
+        prediction_id=entry.prediction_id,
+        created_at=t0,
+        horizon_minutes=5,
+        model_version=entry.model_version,
+        features=GAXFeatures(
+            spot=7750.0,
+            local_gax=0.2,
+            local_gax_curvature=0.1,
+            magnitude=0.2,
+            acceleration_bias="up",
+        ),
+    )
+
+    metrics = score_shadow_candidate([resolved], [shadow], min_gax_magnitude=1.0)
+    assert metrics.overrides == 0
+    assert metrics.production_accuracy == 1.0
+    assert metrics.candidate_accuracy == 1.0
+    assert metrics.lift == 0.0
