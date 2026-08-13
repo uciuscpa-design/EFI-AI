@@ -31,6 +31,7 @@ def _features(row: ResearchRow) -> tuple[float, ...]:
         row.positioning_confidence,
         row.spot_change,
         row.iv_change,
+        row.regime_score,
     )
 
 
