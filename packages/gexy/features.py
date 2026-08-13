@@ -42,8 +42,8 @@ def build_feature_vector(
         contracts,
         spot=snapshot.spx.price,
         price_change=0.0,
-        volatility_change=0.0,
-        time_change=0.0,
+        iv_change=0.0,
+        elapsed_years=0.0,
     )
     return GEXYFeatureVector(
         timestamp=snapshot.timestamp,
