@@ -1,1 +1,1 @@
-collect-once
+tests
