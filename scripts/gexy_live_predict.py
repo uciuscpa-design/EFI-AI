@@ -10,6 +10,8 @@ from urllib.error import HTTPError
 from packages.gexy.alpaca_calendar import is_alpaca_market_session
 from packages.gexy.alpaca_live import predict_from_alpaca
 from packages.gexy.gax_shadow_journal import append_gax_shadow, make_gax_shadow_record
+from packages.gexy.live_prediction import shadow_horizon_grid
+from packages.gexy.multi_horizon import predict_multi_horizon
 from packages.gexy.prediction_journal import append_entry, make_entry
 
 
@@ -34,7 +36,12 @@ def main() -> int:
     parser.add_argument(
         "--journal",
         default="data/gexy/live_predictions.jsonl",
-        help="append-only JSONL path for successful predictions",
+        help="append-only JSONL path for successful production predictions",
+    )
+    parser.add_argument(
+        "--shadow-journal",
+        default="data/gexy/shadow_predictions.jsonl",
+        help="append-only JSONL path for experimental fine-grained horizon predictions",
     )
     parser.add_argument(
         "--gax-shadow-journal",
@@ -42,6 +49,11 @@ def main() -> int:
         help="append-only JSONL path for experimental GAX shadow observations",
     )
     parser.add_argument("--no-journal", action="store_true", help="do not persist predictions or GAX shadow records")
+    parser.add_argument(
+        "--no-fine-shadow",
+        action="store_true",
+        help="disable the experimental 1-minute shadow horizon grid",
+    )
     parser.add_argument(
         "--journal-outside-regular-session",
         action="store_true",
@@ -78,15 +90,25 @@ def main() -> int:
         return 2
 
     forecasts = result.pipeline.multi_horizon.predictions
+    fine_shadow_forecasts = (
+        ()
+        if args.no_fine_shadow
+        else predict_multi_horizon(
+            result.pipeline.surface_features,
+            horizons=shadow_horizon_grid(),
+        ).predictions
+    )
     journaling_allowed = (
         not args.no_journal
         and (regular_session or args.journal_outside_regular_session)
     )
 
     journal_path: str | None = None
+    shadow_journal_path: str | None = None
     gax_shadow_path: str | None = None
     if journaling_allowed:
         path = Path(args.journal)
+        fine_path = Path(args.shadow_journal)
         shadow_path = Path(args.gax_shadow_journal)
         for prediction in forecasts:
             entry = make_entry(
@@ -105,7 +127,18 @@ def main() -> int:
                     features=result.pipeline.gax_features,
                 ),
             )
+        for prediction in fine_shadow_forecasts:
+            append_entry(
+                fine_path,
+                make_entry(
+                    created_at=result.timestamp,
+                    spot=result.spot,
+                    prediction=prediction,
+                    model_version="gexy-shadow-fine-v1",
+                ),
+            )
         journal_path = str(path)
+        shadow_journal_path = str(fine_path) if fine_shadow_forecasts else None
         gax_shadow_path = str(shadow_path)
 
     payload = {
@@ -117,6 +150,7 @@ def main() -> int:
             str(prediction.horizon_minutes): asdict(prediction)
             for prediction in forecasts
         },
+        "fine_shadow_horizons": [prediction.horizon_minutes for prediction in fine_shadow_forecasts],
         "surface": asdict(result.pipeline.surface_features),
         "gax_shadow": asdict(result.pipeline.gax_features),
         "quote_count": len(result.quote_times),
@@ -128,8 +162,10 @@ def main() -> int:
             else "disabled_by_flag" if args.no_journal else "outside_alpaca_market_session"
         ),
         "journal_path": journal_path,
+        "shadow_journal_path": shadow_journal_path,
         "gax_shadow_journal_path": gax_shadow_path,
         "journaled_forecasts": len(forecasts) if journaling_allowed else 0,
+        "journaled_fine_shadow_forecasts": len(fine_shadow_forecasts) if journaling_allowed else 0,
         "journaled_gax_shadows": len(forecasts) if journaling_allowed else 0,
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
