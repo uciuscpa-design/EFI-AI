@@ -1,11 +1,15 @@
 import importlib.util
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "gexy_session_collector.py"
 SPEC = importlib.util.spec_from_file_location("gexy_session_collector", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
+
+_ET = ZoneInfo("America/New_York")
 
 
 class FakeClock:
@@ -24,15 +28,26 @@ class FakeClock:
         self.now += seconds
 
 
+def _session_window():
+    return MODULE.AlpacaMarketSession(
+        session_date="2026-08-14",
+        open_at=datetime(2026, 8, 14, 9, 30, tzinfo=_ET),
+        close_at=datetime(2026, 8, 14, 16, 0, tzinfo=_ET),
+    )
+
+
 def test_run_cycle_skips_outside_session(monkeypatch):
     calls = []
-    monkeypatch.setattr(MODULE, "is_alpaca_market_session", lambda _: False)
+    monkeypatch.setattr(MODULE, "alpaca_market_session_window", lambda _: None)
     monkeypatch.setattr(MODULE, "_run_script", lambda *args: calls.append(args))
 
     payload = MODULE.run_cycle()
 
     assert payload["status"] == "skipped"
     assert payload["reason"] == "outside_alpaca_market_session"
+    assert payload["market_session_date"] is None
+    assert payload["market_session_open_at"] is None
+    assert payload["market_session_close_at"] is None
     assert payload["cycle_duration_seconds"] >= 0.0
     assert payload["cycle_started_at"]
     assert payload["cycle_finished_at"]
@@ -43,7 +58,7 @@ def test_run_cycle_reports_calendar_connectivity_error(monkeypatch):
     def fail_calendar(_):
         raise OSError("network unavailable")
 
-    monkeypatch.setattr(MODULE, "is_alpaca_market_session", fail_calendar)
+    monkeypatch.setattr(MODULE, "alpaca_market_session_window", fail_calendar)
 
     payload = MODULE.run_cycle()
 
@@ -51,12 +66,28 @@ def test_run_cycle_reports_calendar_connectivity_error(monkeypatch):
     assert payload["stage"] == "market_session"
     assert payload["reason"] == "calendar_unavailable"
     assert payload["error_type"] == "OSError"
+    assert payload["market_session_close_at"] is None
     assert payload["cycle_duration_seconds"] >= 0.0
 
 
-def test_run_cycle_resolves_before_predicting(monkeypatch):
+def test_run_cycle_outside_known_session_keeps_authoritative_window(monkeypatch):
+    window = _session_window()
+    monkeypatch.setattr(MODULE, "alpaca_market_session_window", lambda _: window)
+    monkeypatch.setattr(window.__class__, "contains", lambda self, _: False)
+
+    payload = MODULE.run_cycle()
+
+    assert payload["status"] == "skipped"
+    assert payload["market_session_date"] == "2026-08-14"
+    assert payload["market_session_open_at"] == "2026-08-14T09:30:00-04:00"
+    assert payload["market_session_close_at"] == "2026-08-14T16:00:00-04:00"
+
+
+def test_run_cycle_resolves_before_predicting_and_records_session_window(monkeypatch):
     calls = []
-    monkeypatch.setattr(MODULE, "is_alpaca_market_session", lambda _: True)
+    window = _session_window()
+    monkeypatch.setattr(MODULE, "alpaca_market_session_window", lambda _: window)
+    monkeypatch.setattr(window.__class__, "contains", lambda self, _: True)
 
     def fake_run(script_name, *args):
         calls.append((script_name, args))
@@ -77,12 +108,17 @@ def test_run_cycle_resolves_before_predicting(monkeypatch):
     assert calls[0] == ("gexy_resolve_due.py", ("--tolerance-seconds", "75"))
     assert calls[1] == ("gexy_live_predict.py", ("--horizon", "30"))
     assert payload["prediction"]["journaled_fine_shadow_forecasts"] == 60
+    assert payload["market_session_date"] == "2026-08-14"
+    assert payload["market_session_open_at"] == "2026-08-14T09:30:00-04:00"
+    assert payload["market_session_close_at"] == "2026-08-14T16:00:00-04:00"
     assert payload["cycle_duration_seconds"] >= 0.0
 
 
 def test_run_cycle_stops_if_resolver_fails(monkeypatch):
     calls = []
-    monkeypatch.setattr(MODULE, "is_alpaca_market_session", lambda _: True)
+    window = _session_window()
+    monkeypatch.setattr(MODULE, "alpaca_market_session_window", lambda _: window)
+    monkeypatch.setattr(window.__class__, "contains", lambda self, _: True)
 
     def fake_run(script_name, *args):
         calls.append((script_name, args))
@@ -94,6 +130,7 @@ def test_run_cycle_stops_if_resolver_fails(monkeypatch):
 
     assert payload["status"] == "error"
     assert payload["stage"] == "resolve_due"
+    assert payload["market_session_close_at"] == "2026-08-14T16:00:00-04:00"
     assert [name for name, _ in calls] == ["gexy_resolve_due.py"]
 
 
@@ -152,7 +189,6 @@ def test_scheduler_subtracts_cycle_runtime_from_sleep(monkeypatch):
 
     assert exit_code == 0
     assert clock.sleeps == [45.0]
-    # First cycle starts at t=0 and the next starts at the anchored t=60 tick.
     assert clock.now == 75.0
 
 
