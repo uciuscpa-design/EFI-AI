@@ -5,7 +5,7 @@ import hashlib
 import json
 import shutil
 import subprocess
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +39,47 @@ def _git_head() -> str | None:
     )
     value = completed.stdout.strip()
     return value if completed.returncode == 0 and value else None
+
+
+def _observed_times_from_log(path: Path) -> list[datetime]:
+    observed: list[datetime] = []
+    if not path.exists():
+        return observed
+    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        value = payload.get("observed_at")
+        if not isinstance(value, str):
+            continue
+        try:
+            timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if timestamp.tzinfo is not None:
+            observed.append(timestamp)
+    return sorted(set(observed))
+
+
+def _detect_observation_gaps(path: Path, *, threshold_seconds: int = 180) -> list[dict[str, object]]:
+    observed = _observed_times_from_log(path)
+    gaps: list[dict[str, object]] = []
+    for previous, current in zip(observed, observed[1:]):
+        seconds = (current - previous).total_seconds()
+        if seconds > threshold_seconds:
+            gaps.append(
+                {
+                    "start": previous.isoformat(),
+                    "end": current.isoformat(),
+                    "duration_seconds": seconds,
+                    "reason": "observation_gap_detected",
+                }
+            )
+    return gaps
 
 
 def snapshot_session(
@@ -81,7 +122,7 @@ def snapshot_session(
             "sha256": _sha256(target),
         })
 
-    gaps: list[dict[str, str]] = []
+    gaps: list[dict[str, object]] = _detect_observation_gaps(log_path)
     if gap_start or gap_end:
         if not gap_start or not gap_end:
             raise ValueError("gap_start and gap_end must be supplied together")
