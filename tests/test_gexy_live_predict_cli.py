@@ -82,21 +82,36 @@ def test_main_emits_and_journals_multi_horizon_bundle(monkeypatch, tmp_path, cap
     monkeypatch.setattr(MODULE, "predict_from_alpaca", lambda **_: fake_result)
     monkeypatch.setattr(MODULE, "is_alpaca_market_session", lambda _: True)
     journal = tmp_path / "live_predictions.jsonl"
-    shadow = tmp_path / "gax_shadow.jsonl"
+    fine_shadow = tmp_path / "shadow_predictions.jsonl"
+    gax_shadow = tmp_path / "gax_shadow.jsonl"
     monkeypatch.setattr(
         sys,
         "argv",
-        [str(SCRIPT), "--journal", str(journal), "--gax-shadow-journal", str(shadow)],
+        [
+            str(SCRIPT),
+            "--journal",
+            str(journal),
+            "--shadow-journal",
+            str(fine_shadow),
+            "--gax-shadow-journal",
+            str(gax_shadow),
+        ],
     )
 
     assert MODULE.main() == 0
     payload = json.loads(capsys.readouterr().out)
     assert set(payload["predictions_by_horizon"]) == {"5", "15", "30", "60"}
+    assert payload["fine_shadow_horizons"] == list(range(1, 61))
     assert payload["gax_shadow"]["source"] == "gex_spatial_derivative_proxy_v1"
     assert payload["journaled_forecasts"] == 4
+    assert payload["journaled_fine_shadow_forecasts"] == 60
     assert payload["journaled_gax_shadows"] == 4
     entries = load_entries(journal)
-    shadows = load_gax_shadows(shadow)
+    fine_entries = load_entries(fine_shadow)
+    shadows = load_gax_shadows(gax_shadow)
     assert len(entries) == 4
+    assert len(fine_entries) == 60
+    assert {entry.prediction.horizon_minutes for entry in fine_entries} == set(range(1, 61))
+    assert {entry.model_version for entry in fine_entries} == {"gexy-shadow-fine-v1"}
     assert len(shadows) == 4
     assert {item.prediction_id for item in shadows} == {entry.prediction_id for entry in entries}
