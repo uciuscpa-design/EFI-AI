@@ -38,6 +38,32 @@ def test_snapshot_session_copies_and_hashes_research_files(tmp_path, monkeypatch
     assert metadata["session_date"] == "2026-08-14"
 
 
+def test_snapshot_auto_detects_large_observation_gap(tmp_path, monkeypatch):
+    monkeypatch.setattr(MODULE, "_git_head", lambda: None)
+    data_dir = tmp_path / "data" / "gexy"
+    logs_dir = data_dir / "logs"
+    logs_dir.mkdir(parents=True)
+    for name in ("live_predictions.jsonl", "shadow_predictions.jsonl", "gax_shadow.jsonl"):
+        (data_dir / name).write_text("", encoding="utf-8")
+    (logs_dir / "session-2026-08-14.log").write_text(
+        '\n'.join([
+            '{"status":"ok","observed_at":"2026-08-14T18:01:22+00:00"}',
+            '{"status":"ok","observed_at":"2026-08-14T18:02:22+00:00"}',
+            '{"status":"ok","observed_at":"2026-08-14T18:48:40+00:00"}',
+        ]) + "\n",
+        encoding="utf-8",
+    )
+
+    report = MODULE.snapshot_session(session_date="2026-08-14", root=tmp_path)
+
+    assert len(report["known_data_gaps"]) == 1
+    gap = report["known_data_gaps"][0]
+    assert gap["reason"] == "observation_gap_detected"
+    assert gap["start"] == "2026-08-14T18:02:22+00:00"
+    assert gap["end"] == "2026-08-14T18:48:40+00:00"
+    assert gap["duration_seconds"] == 2778.0
+
+
 def test_snapshot_refuses_overwrite_without_force(tmp_path, monkeypatch):
     monkeypatch.setattr(MODULE, "_git_head", lambda: None)
     destination = tmp_path / "projects" / "gexy" / "snapshots" / "2026-08-14"
