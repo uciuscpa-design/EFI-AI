@@ -3,6 +3,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from packages.gexy.live_prediction import LivePrediction
 from packages.gexy.prediction_journal import make_entry, resolve_entry
 
@@ -51,7 +53,7 @@ def test_backtest_report_scores_frozen_predictions_and_baseline():
     assert metrics["resolved"] == 5
     assert metrics["directional_accuracy"] == 0.6
     assert metrics["always_down_accuracy"] == 0.8
-    assert metrics["lift_vs_best_constant"] == -0.2
+    assert metrics["lift_vs_best_constant"] == pytest.approx(-0.2)
     assert report["by_horizon"]["5"]["resolved"] == 5
 
 
