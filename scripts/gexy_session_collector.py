@@ -74,6 +74,32 @@ def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
     }
 
 
+def run_loop(*, interval_seconds: int = 60, tolerance_seconds: int = 90) -> int:
+    """Wait for the session, collect every interval, then stop after session close.
+
+    Starting this process before the regular session is safe: skipped cycles are treated
+    as a waiting state until at least one successful in-session collection has occurred.
+    After collection has begun, the first outside-session observation ends the process.
+    """
+    collected_in_session = False
+    while True:
+        payload = run_cycle(tolerance_seconds=tolerance_seconds)
+        print(json.dumps(payload, sort_keys=True), flush=True)
+
+        status = payload.get("status")
+        if status == "error":
+            return 2
+        if status == "ok":
+            collected_in_session = True
+            time.sleep(interval_seconds)
+            continue
+        if status == "skipped" and collected_in_session:
+            return 0
+
+        # Before the first successful session cycle, remain armed and wait for open.
+        time.sleep(interval_seconds)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Collect and resolve GEXY forecasts once per minute during Alpaca market sessions"
@@ -93,14 +119,10 @@ def main() -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0 if payload.get("status") != "error" else 2
 
-    while True:
-        payload = run_cycle(tolerance_seconds=args.tolerance_seconds)
-        print(json.dumps(payload, sort_keys=True), flush=True)
-        if payload.get("status") == "skipped":
-            return 0
-        if payload.get("status") == "error":
-            return 2
-        time.sleep(args.interval_seconds)
+    return run_loop(
+        interval_seconds=args.interval_seconds,
+        tolerance_seconds=args.tolerance_seconds,
+    )
 
 
 if __name__ == "__main__":
