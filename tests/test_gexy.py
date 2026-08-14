@@ -5,6 +5,11 @@ from datetime import date
 import pytest
 
 from packages.gexy.exposure import build_gex_surface, contract_exposure
+from packages.gexy.greeks import (
+    black_scholes_greeks,
+    enrich_missing_greeks,
+    implied_volatility_from_price,
+)
 from packages.gexy.models import OptionSurfacePoint, OptionType
 from packages.gexy.normalization import normalize_alpaca_option_surface
 
@@ -127,6 +132,111 @@ def test_missing_snapshot_keeps_contract_and_marks_missing() -> None:
     assert len(surface.points) == 1
     assert surface.missing_snapshots == 1
     assert surface.points[0].gamma is None
+
+
+def test_black_scholes_call_put_share_gamma_and_delta_relationship() -> None:
+    call = black_scholes_greeks(
+        option_type=OptionType.CALL,
+        spot=7800.0,
+        strike=7800.0,
+        time_to_expiry_years=7 / 365,
+        volatility=0.20,
+        risk_free_rate=0.04,
+        dividend_yield=0.01,
+    )
+    put = black_scholes_greeks(
+        option_type=OptionType.PUT,
+        spot=7800.0,
+        strike=7800.0,
+        time_to_expiry_years=7 / 365,
+        volatility=0.20,
+        risk_free_rate=0.04,
+        dividend_yield=0.01,
+    )
+
+    assert call.price > 0
+    assert put.price > 0
+    assert call.gamma == pytest.approx(put.gamma)
+    assert call.gamma > 0
+    assert call.delta > 0
+    assert put.delta < 0
+
+
+def test_implied_volatility_round_trip() -> None:
+    inputs = dict(
+        option_type=OptionType.CALL,
+        spot=7800.0,
+        strike=7825.0,
+        time_to_expiry_years=14 / 365,
+        risk_free_rate=0.04,
+        dividend_yield=0.01,
+    )
+    expected_volatility = 0.235
+    price = black_scholes_greeks(volatility=expected_volatility, **inputs).price
+
+    recovered = implied_volatility_from_price(option_price=price, **inputs)
+
+    assert recovered == pytest.approx(expected_volatility, rel=1e-6)
+
+
+def test_greek_enrichment_uses_alpaca_iv_when_greeks_are_missing() -> None:
+    point = OptionSurfacePoint(
+        symbol="SPXW260821C07800000",
+        underlying_symbol="SPX",
+        expiration_date=date(2026, 8, 21),
+        option_type=OptionType.CALL,
+        strike=7800.0,
+        multiplier=100.0,
+        open_interest=1000.0,
+        implied_volatility=0.20,
+    )
+
+    result = enrich_missing_greeks(
+        point,
+        spot=7800.0,
+        time_to_expiry_years=7 / 365,
+        risk_free_rate=0.04,
+        dividend_yield=0.01,
+    )
+
+    assert result.source == "alpaca_iv"
+    assert result.point.gamma is not None and result.point.gamma > 0
+    assert result.point.delta is not None and result.point.delta > 0
+
+
+def test_greek_enrichment_can_recover_iv_from_quote_mid() -> None:
+    theoretical = black_scholes_greeks(
+        option_type=OptionType.PUT,
+        spot=7800.0,
+        strike=7800.0,
+        time_to_expiry_years=7 / 365,
+        volatility=0.22,
+        risk_free_rate=0.04,
+        dividend_yield=0.01,
+    )
+    point = OptionSurfacePoint(
+        symbol="SPXW260821P07800000",
+        underlying_symbol="SPX",
+        expiration_date=date(2026, 8, 21),
+        option_type=OptionType.PUT,
+        strike=7800.0,
+        multiplier=100.0,
+        open_interest=500.0,
+        bid=theoretical.price - 0.05,
+        ask=theoretical.price + 0.05,
+    )
+
+    result = enrich_missing_greeks(
+        point,
+        spot=7800.0,
+        time_to_expiry_years=7 / 365,
+        risk_free_rate=0.04,
+        dividend_yield=0.01,
+    )
+
+    assert result.source == "quote_implied_iv"
+    assert result.implied_volatility == pytest.approx(0.22, rel=1e-5)
+    assert result.point.gamma is not None and result.point.gamma > 0
 
 
 def test_contract_exposure_has_exact_gax_gex_scaling() -> None:
