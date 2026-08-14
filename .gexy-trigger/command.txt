@@ -1,1 +1,1 @@
-refresh-session-snapshot 
+session-log-tail
