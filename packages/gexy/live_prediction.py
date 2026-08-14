@@ -6,6 +6,12 @@ from math import exp
 from .surface_features import GEXSurfaceFeatures
 
 
+PRODUCTION_HORIZONS_MINUTES = (5, 15, 30, 60)
+DEFAULT_SHADOW_MIN_HORIZON_MINUTES = 1
+DEFAULT_SHADOW_MAX_HORIZON_MINUTES = 60
+DEFAULT_SHADOW_HORIZON_STEP_MINUTES = 1
+
+
 @dataclass(frozen=True)
 class LivePrediction:
     direction: str
@@ -15,6 +21,22 @@ class LivePrediction:
     confidence: float
     horizon_minutes: int
     regime: str
+
+
+def shadow_horizon_grid(
+    *,
+    minimum_minutes: int = DEFAULT_SHADOW_MIN_HORIZON_MINUTES,
+    maximum_minutes: int = DEFAULT_SHADOW_MAX_HORIZON_MINUTES,
+    step_minutes: int = DEFAULT_SHADOW_HORIZON_STEP_MINUTES,
+) -> tuple[int, ...]:
+    """Return an experimental integer-minute horizon grid without changing production horizons."""
+    if minimum_minutes <= 0:
+        raise ValueError("minimum_minutes must be positive")
+    if maximum_minutes < minimum_minutes:
+        raise ValueError("maximum_minutes must be >= minimum_minutes")
+    if step_minutes <= 0:
+        raise ValueError("step_minutes must be positive")
+    return tuple(range(minimum_minutes, maximum_minutes + 1, step_minutes))
 
 
 def _confidence(features: GEXSurfaceFeatures, expected_move: float) -> float:
