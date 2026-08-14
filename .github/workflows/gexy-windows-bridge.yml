@@ -33,6 +33,8 @@ on:
           - shadow-diagnostics
           - qualification-report
           - cadence-report
+          - backtest-report
+          - finish-check
           - snapshot-session
           - refresh-session-snapshot
 
@@ -56,7 +58,7 @@ jobs:
             $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
             $command = "$content".Trim()
           }
-          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','collect-session','install-session-task','start-session-task','session-task-status','session-log-tail','journal-report','shadow-report','shadow-diagnostics','qualification-report','cadence-report','snapshot-session','refresh-session-snapshot')
+          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','collect-session','install-session-task','start-session-task','session-task-status','session-log-tail','journal-report','shadow-report','shadow-diagnostics','qualification-report','cadence-report','backtest-report','finish-check','snapshot-session','refresh-session-snapshot')
           if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
           "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         env:
@@ -80,7 +82,7 @@ jobs:
             exit $LASTEXITCODE
           }
 
-          if ($command -in @('tests','journal-report','shadow-report','shadow-diagnostics','qualification-report','cadence-report','snapshot-session','refresh-session-snapshot','install-session-task','start-session-task')) {
+          if ($command -in @('tests','journal-report','shadow-report','shadow-diagnostics','qualification-report','cadence-report','backtest-report','finish-check','snapshot-session','refresh-session-snapshot','install-session-task','start-session-task')) {
             git pull --ff-only origin feature/gexy
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
@@ -113,6 +115,16 @@ jobs:
           if ($command -eq 'cadence-report') {
             $sessionDate = Get-Date -Format 'yyyy-MM-dd'
             python scripts\gexy_session_cadence_report.py --session-date $sessionDate
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'backtest-report') {
+            python scripts\gexy_backtest_report.py --source shadow
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'finish-check') {
+            python scripts\gexy_finish_check.py --strict-data
             exit $LASTEXITCODE
           }
 
