@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 from datetime import date, datetime
@@ -14,6 +15,10 @@ DEFAULT_SOURCES = (
     Path("data/gexy/live_predictions.jsonl"),
     Path("data/gexy/shadow_predictions.jsonl"),
     Path("data/gexy/gax_shadow.jsonl"),
+)
+_LIFECYCLE_PATTERN = re.compile(
+    r"^\[(?P<timestamp>[^\]]+)\]\s+GEXY session collector (?P<event>starting|exited code=(?P<code>-?\d+))\s*$",
+    re.MULTILINE,
 )
 
 
@@ -47,12 +52,7 @@ def _git_head() -> str | None:
 
 
 def _json_objects_from_text(text: str) -> Iterator[dict[str, object]]:
-    """Yield complete JSON objects embedded in mixed/plain-text collector logs.
-
-    Collector subprocesses print indented JSON, so a line-by-line parser misses
-    observation timestamps. Scan for object starts and let JSONDecoder consume the
-    complete object, while safely skipping non-JSON braces from incidental text.
-    """
+    """Yield complete JSON objects embedded in mixed/plain-text collector logs."""
     decoder = json.JSONDecoder()
     cursor = 0
     while True:
@@ -104,6 +104,79 @@ def _detect_observation_gaps(path: Path, *, threshold_seconds: int = 180) -> lis
     return gaps
 
 
+def _detect_lifecycle_gaps(path: Path, *, threshold_seconds: int = 180) -> list[dict[str, object]]:
+    """Detect downtime between a recorded collector exit and its next restart."""
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8", errors="replace")
+    events: list[tuple[datetime, str, int | None]] = []
+    for match in _LIFECYCLE_PATTERN.finditer(text):
+        try:
+            timestamp = datetime.fromisoformat(match.group("timestamp").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if timestamp.tzinfo is None:
+            continue
+        code = match.group("code")
+        events.append((timestamp, match.group("event"), None if code is None else int(code)))
+    events.sort(key=lambda row: row[0])
+
+    gaps: list[dict[str, object]] = []
+    last_exit: tuple[datetime, int | None] | None = None
+    for timestamp, event, code in events:
+        if event.startswith("exited code="):
+            last_exit = (timestamp, code)
+            continue
+        if event == "starting" and last_exit is not None:
+            exited_at, exit_code = last_exit
+            seconds = (timestamp - exited_at).total_seconds()
+            if seconds > threshold_seconds:
+                gaps.append(
+                    {
+                        "start": exited_at.isoformat(),
+                        "end": timestamp.isoformat(),
+                        "duration_seconds": seconds,
+                        "reason": "collector_restart_gap",
+                        "exit_code": exit_code,
+                    }
+                )
+            last_exit = None
+    return gaps
+
+
+def _parse_gap_time(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return timestamp if timestamp.tzinfo is not None else None
+
+
+def _combine_detected_gaps(
+    lifecycle_gaps: list[dict[str, object]],
+    observation_gaps: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Prefer lifecycle evidence when an observation gap overlaps the same downtime."""
+    combined = list(lifecycle_gaps)
+    for observation in observation_gaps:
+        obs_start = _parse_gap_time(observation.get("start"))
+        obs_end = _parse_gap_time(observation.get("end"))
+        overlaps = False
+        if obs_start is not None and obs_end is not None:
+            for lifecycle in lifecycle_gaps:
+                life_start = _parse_gap_time(lifecycle.get("start"))
+                life_end = _parse_gap_time(lifecycle.get("end"))
+                if life_start is not None and life_end is not None and obs_start <= life_end and life_start <= obs_end:
+                    overlaps = True
+                    break
+        if not overlaps:
+            combined.append(observation)
+    combined.sort(key=lambda gap: str(gap.get("start", "")))
+    return combined
+
+
 def snapshot_session(
     *,
     session_date: str,
@@ -128,23 +201,25 @@ def snapshot_session(
     files: list[dict[str, object]] = []
     for source in source_paths:
         if not source.exists():
-            files.append({
-                "source": _relative_posix(source, root),
-                "present": False,
-            })
+            files.append({"source": _relative_posix(source, root), "present": False})
             continue
         target = destination / source.name
         shutil.copy2(source, target)
-        files.append({
-            "source": _relative_posix(source, root),
-            "snapshot": _relative_posix(target, root),
-            "present": True,
-            "bytes": target.stat().st_size,
-            "lines": _line_count(target),
-            "sha256": _sha256(target),
-        })
+        files.append(
+            {
+                "source": _relative_posix(source, root),
+                "snapshot": _relative_posix(target, root),
+                "present": True,
+                "bytes": target.stat().st_size,
+                "lines": _line_count(target),
+                "sha256": _sha256(target),
+            }
+        )
 
-    gaps: list[dict[str, object]] = _detect_observation_gaps(log_path)
+    gaps = _combine_detected_gaps(
+        _detect_lifecycle_gaps(log_path),
+        _detect_observation_gaps(log_path),
+    )
     if gap_start or gap_end:
         if not gap_start or not gap_end:
             raise ValueError("gap_start and gap_end must be supplied together")
