@@ -16,11 +16,25 @@ class Settings(BaseSettings):
     )
     max_position_notional: float = 10_000.0
     max_daily_loss: float = 1_000.0
+    alpaca_api_key_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("APCA_API_KEY_ID", "EFI_ALPACA_API_KEY_ID"),
+    )
+    alpaca_api_secret_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("APCA_API_SECRET_KEY", "EFI_ALPACA_API_SECRET_KEY"),
+    )
+    alpaca_options_feed: str = Field(
+        default="indicative",
+        validation_alias=AliasChoices("APCA_OPTIONS_FEED", "EFI_ALPACA_OPTIONS_FEED"),
+    )
 
     model_config = SettingsConfigDict(env_prefix="EFI_", env_file=".env", extra="ignore")
 
     @model_validator(mode="after")
     def enforce_production_safety(self) -> "Settings":
+        if self.alpaca_options_feed not in {"indicative", "opra"}:
+            raise ValueError("APCA_OPTIONS_FEED must be either 'indicative' or 'opra'")
         if self.environment.lower() == "production":
             if not self.paper_trading:
                 raise ValueError("EFI_PAPER_TRADING must remain true in production until live execution is explicitly approved")
