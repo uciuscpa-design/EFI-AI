@@ -8,7 +8,7 @@
     :root{color-scheme:dark}
     *{box-sizing:border-box}
     html,body{margin:0;height:100%;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#090c10;color:#e8edf2}
-    .window{height:100%;display:flex;flex-direction:column;min-height:620px}
+    .window{height:100%;display:flex;flex-direction:column;min-height:720px}
     .toolbar{display:flex;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #242a31;flex-wrap:wrap;background:#0d1117}
     .brand{font-size:18px;letter-spacing:.08em}.brand span{font-size:10px;color:#8b98a5;letter-spacing:.04em;margin-left:7px}
     label{font-size:12px;color:#a7b2bd}.toolbar select,.toolbar button{background:#141a22;color:#e8edf2;border:1px solid #303943;border-radius:6px;padding:6px 9px}
@@ -16,9 +16,11 @@
     .status{font-size:12px;color:#9ca8b4;margin-left:auto}
     .cards{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:1px;background:#252c34;border-bottom:1px solid #252c34}
     .card{background:#0d1117;padding:10px 12px;min-height:62px}.card .k{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#7f8b96}.card .v{font-size:17px;font-weight:650;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card .s{font-size:10px;color:#7f8b96;margin-top:2px}
-    .chart{position:relative;flex:1;min-height:390px;overflow:hidden;background:linear-gradient(#10151b,#090c10)}
+    .chart{position:relative;flex:1;min-height:360px;overflow:hidden;background:linear-gradient(#10151b,#090c10)}
+    .prediction-chart{position:relative;height:190px;min-height:150px;border-top:1px solid #242a31;background:#0c1117;overflow:hidden}
+    .prediction-chart.hidden{display:none}
     canvas{position:absolute;inset:0;width:100%;height:100%}
-    .legend{position:absolute;top:12px;left:12px;padding:8px 10px;background:#090c10d9;border:1px solid #303943;border-radius:7px;font-size:11px;line-height:1.45;max-width:360px}
+    .legend{position:absolute;top:12px;left:12px;padding:8px 10px;background:#090c10d9;border:1px solid #303943;border-radius:7px;font-size:11px;line-height:1.45;max-width:380px;pointer-events:none}
     .foot{padding:7px 13px;border-top:1px solid #242a31;background:#0d1117;color:#7f8b96;font-size:10px}
     @media(max-width:980px){.cards{grid-template-columns:repeat(3,1fr)}.status{width:100%;margin-left:0}}
   </style>
@@ -30,6 +32,7 @@
     <label>Horizon <select id="horizon"></select></label>
     <label>Source <select id="source"><option value="auto" selected>Auto</option><option value="production">Production</option><option value="shadow">Shadow</option></select></label>
     <label><input id="overlay" type="checkbox" checked> Forecast overlay</label>
+    <label><input id="predictionPanelToggle" type="checkbox" checked> Prediction chart</label>
     <label><input id="bands" type="checkbox" checked> Confidence guide</label>
     <label><input id="levels" type="checkbox" checked> Target / invalidation</label>
     <button id="refresh">Refresh</button>
@@ -47,7 +50,11 @@
 
   <div class="chart" id="chart">
     <canvas id="price"></canvas>
-    <div class="legend" id="legend">Sampled SPX candles from GEXY observations. Dashed extension is the selected-horizon forecast.</div>
+    <div class="legend">Sampled SPX candles from GEXY observations. Dashed extension is the selected-horizon forecast.</div>
+  </div>
+  <div class="prediction-chart" id="predictionChart">
+    <canvas id="prediction"></canvas>
+    <div class="legend">Prediction history — expected SPX move in points for the selected horizon. Zero is neutral.</div>
   </div>
   <div class="foot">Research/paper mode. Candles are reconstructed from GEXY's sampled SPX reference observations, not exchange-native OHLC bars. No automatic trade execution.</div>
 </div>
@@ -56,6 +63,8 @@ const horizon=document.getElementById('horizon');
 for(let i=1;i<=60;i++){const o=document.createElement('option');o.value=String(i);o.textContent=`${i}m`;if(i===5)o.selected=true;horizon.appendChild(o)}
 const source=document.getElementById('source');
 const canvas=document.getElementById('price'),ctx=canvas.getContext('2d');
+const predictionCanvas=document.getElementById('prediction'),pctx=predictionCanvas.getContext('2d');
+const predictionChart=document.getElementById('predictionChart');
 let points=[];
 
 function fnum(v,d=2){return Number.isFinite(Number(v))?Number(v).toFixed(d):'—'}
@@ -84,23 +93,22 @@ function setCards(){
 function candlesFromPoints(rows,groupSize=5){
   const out=[];
   for(let i=0;i<rows.length;i+=groupSize){
-    const g=rows.slice(i,i+groupSize); if(!g.length)continue;
-    const vals=g.map(x=>Number(x.spot)).filter(Number.isFinite); if(!vals.length)continue;
+    const g=rows.slice(i,i+groupSize);if(!g.length)continue;
+    const vals=g.map(x=>Number(x.spot)).filter(Number.isFinite);if(!vals.length)continue;
     out.push({t:g[g.length-1].timestamp,o:vals[0],h:Math.max(...vals),l:Math.min(...vals),c:vals[vals.length-1]});
   }
   return out;
 }
 
-function draw(){
+function drawPrice(){
   const w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);if(!points.length)return;
   const candles=candlesFromPoints(points,5);const p=latest();
   const values=[];candles.forEach(c=>values.push(c.h,c.l));
   if(document.getElementById('overlay').checked&&p)values.push(Number(p.forecast_spot));
   if(document.getElementById('levels').checked&&p){if(Number.isFinite(Number(p.primary_target)))values.push(Number(p.primary_target));if(Number.isFinite(Number(p.invalidation_level)))values.push(Number(p.invalidation_level))}
   let lo=Math.min(...values),hi=Math.max(...values);let span=Math.max(hi-lo,4);lo-=span*.08;hi+=span*.08;span=hi-lo;
-  const padL=58,padR=78,padT=28,padB=35;const plotW=w-padL-padR,plotH=h-padT-padB;
-  const y=v=>padT+(hi-v)/span*plotH;
-  const step=plotW/Math.max(candles.length+5,10);const x=i=>padL+(i+.5)*step;
+  const padL=58,padR=78,padT=28,padB=35,plotW=w-padL-padR,plotH=h-padT-padB;
+  const y=v=>padT+(hi-v)/span*plotH;const step=plotW/Math.max(candles.length+5,10);const x=i=>padL+(i+.5)*step;
 
   ctx.font=`${11*devicePixelRatio}px system-ui`;ctx.fillStyle='#83909d';ctx.strokeStyle='#202832';ctx.lineWidth=devicePixelRatio;
   for(let i=0;i<=5;i++){const yy=padT+i*plotH/5;ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(w-padR,yy);ctx.stroke();const v=hi-i*span/5;ctx.fillText(v.toFixed(1),5*devicePixelRatio,yy+4*devicePixelRatio)}
@@ -115,12 +123,23 @@ function draw(){
 
   if(document.getElementById('overlay').checked&&p&&candles.length){
     const startX=x(candles.length-1),endX=x(candles.length+4),startY=y(Number(p.spot)),endY=y(Number(p.forecast_spot));
-    if(document.getElementById('bands').checked){const move=Math.abs(Number(p.expected_move_points)||0);const conf=Number(p.confidence)||0;const uncertainty=Math.max(move*(1-conf),.5);const top=y(Number(p.forecast_spot)+uncertainty),bottom=y(Number(p.forecast_spot)-uncertainty);ctx.fillStyle='#6aa7ff22';ctx.fillRect(startX,Math.min(top,bottom),endX-startX,Math.abs(bottom-top))}
+    if(document.getElementById('bands').checked){const move=Math.abs(Number(p.expected_move_points)||0),conf=Number(p.confidence)||0,uncertainty=Math.max(move*(1-conf),.5);const top=y(Number(p.forecast_spot)+uncertainty),bottom=y(Number(p.forecast_spot)-uncertainty);ctx.fillStyle='#6aa7ff22';ctx.fillRect(startX,Math.min(top,bottom),endX-startX,Math.abs(bottom-top))}
     ctx.strokeStyle='#6aa7ff';ctx.lineWidth=2*devicePixelRatio;ctx.setLineDash([8*devicePixelRatio,5*devicePixelRatio]);ctx.beginPath();ctx.moveTo(startX,startY);ctx.lineTo(endX,endY);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#6aa7ff';ctx.fillText(`${p.horizon_minutes}m ${p.direction} → ${Number(p.forecast_spot).toFixed(1)}`,Math.min(endX,w-padR-145*devicePixelRatio),endY-8*devicePixelRatio);
   }
 }
 
-function resize(){canvas.width=Math.floor(canvas.clientWidth*devicePixelRatio);canvas.height=Math.floor(canvas.clientHeight*devicePixelRatio);draw()}
+function drawPrediction(){
+  const w=predictionCanvas.width,h=predictionCanvas.height;pctx.clearRect(0,0,w,h);if(!points.length||predictionChart.classList.contains('hidden'))return;
+  const vals=points.map(p=>Number(p.expected_move_points)).filter(Number.isFinite);if(!vals.length)return;
+  let maxAbs=Math.max(1,...vals.map(Math.abs));const padL=58,padR=22,padT=28,padB=22,plotW=w-padL-padR,plotH=h-padT-padB;
+  const x=i=>padL+(i/Math.max(vals.length-1,1))*plotW;const y=v=>padT+((maxAbs-v)/(2*maxAbs))*plotH;const zeroY=y(0);
+  pctx.font=`${10*devicePixelRatio}px system-ui`;pctx.strokeStyle='#33404d';pctx.fillStyle='#83909d';pctx.lineWidth=devicePixelRatio;pctx.setLineDash([4*devicePixelRatio,4*devicePixelRatio]);pctx.beginPath();pctx.moveTo(padL,zeroY);pctx.lineTo(w-padR,zeroY);pctx.stroke();pctx.setLineDash([]);pctx.fillText('0',8*devicePixelRatio,zeroY+4*devicePixelRatio);pctx.fillText(`+${maxAbs.toFixed(1)}`,8*devicePixelRatio,padT+4*devicePixelRatio);pctx.fillText(`-${maxAbs.toFixed(1)}`,8*devicePixelRatio,h-padB);
+  pctx.strokeStyle='#6aa7ff';pctx.lineWidth=2*devicePixelRatio;pctx.beginPath();vals.forEach((v,i)=>i?pctx.lineTo(x(i),y(v)):pctx.moveTo(x(i),y(v)));pctx.stroke();
+  const last=vals[vals.length-1];pctx.fillStyle=last>=0?'#9dd9b8':'#ee9b9b';pctx.beginPath();pctx.arc(x(vals.length-1),y(last),3.5*devicePixelRatio,0,Math.PI*2);pctx.fill();
+}
+
+function draw(){drawPrice();drawPrediction()}
+function resize(){canvas.width=Math.floor(canvas.clientWidth*devicePixelRatio);canvas.height=Math.floor(canvas.clientHeight*devicePixelRatio);predictionCanvas.width=Math.floor(predictionCanvas.clientWidth*devicePixelRatio);predictionCanvas.height=Math.floor(predictionCanvas.clientHeight*devicePixelRatio);draw()}
 window.addEventListener('resize',resize);
 
 async function refresh(){
@@ -134,6 +153,7 @@ async function refresh(){
 }
 
 ['overlay','bands','levels'].forEach(id=>document.getElementById(id).addEventListener('change',draw));
+document.getElementById('predictionPanelToggle').addEventListener('change',event=>{predictionChart.classList.toggle('hidden',!event.target.checked);resize()});
 horizon.addEventListener('change',refresh);source.addEventListener('change',refresh);document.getElementById('refresh').addEventListener('click',refresh);
 resize();refresh();setInterval(refresh,15000);
 </script>
