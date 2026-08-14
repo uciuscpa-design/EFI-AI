@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .gax_shadow_candidate import score_shadow_candidate
 from .gax_shadow_journal import index_gax_shadows, load_gax_shadows, summarize_gax_shadow
+from .horizon_walk_forward import select_shortest_walk_forward_validated_horizon_from_entries
 from .prediction_journal import load_entries
 
 
@@ -259,4 +260,7 @@ def build_gax_shadow_report(
     }
     report["promotion_recommendation"] = _promotion_recommendation(report)
     report["shortest_trusted_horizon"] = select_shortest_trusted_horizon(by_horizon)
+    report["shortest_walk_forward_validated_horizon"] = (
+        select_shortest_walk_forward_validated_horizon_from_entries(entries)
+    )
     return report
