@@ -33,6 +33,7 @@ def main() -> int:
     parser.add_argument("--minimum-sessions", type=int, default=3)
     parser.add_argument("--minimum-lift", type=float, default=0.05)
     parser.add_argument("--minimum-positive-session-fraction", type=float, default=2.0 / 3.0)
+    parser.add_argument("--minimum-resolution-coverage", type=float, default=0.90)
     args = parser.parse_args()
 
     sessions = _load_snapshot_sessions(Path(args.snapshots_root))
@@ -43,6 +44,7 @@ def main() -> int:
         minimum_sessions=args.minimum_sessions,
         minimum_lift_vs_baseline=args.minimum_lift,
         minimum_positive_lift_session_fraction=args.minimum_positive_session_fraction,
+        minimum_resolution_coverage=args.minimum_resolution_coverage,
     )
 
     payload = {
@@ -58,6 +60,7 @@ def main() -> int:
             "minimum_sessions": args.minimum_sessions,
             "minimum_lift_vs_baseline": args.minimum_lift,
             "minimum_positive_lift_session_fraction": args.minimum_positive_session_fraction,
+            "minimum_resolution_coverage": args.minimum_resolution_coverage,
         },
         "by_horizon": {
             str(metric.horizon_minutes): asdict(metric)
