@@ -23,6 +23,7 @@ on:
           - live-predict
           - resolve-due
           - journal-report
+          - shadow-report
 
 jobs:
   gexy:
@@ -44,7 +45,7 @@ jobs:
             $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
             $command = "$content".Trim()
           }
-          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','journal-report')
+          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','journal-report','shadow-report')
           if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
           "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         env:
@@ -68,7 +69,7 @@ jobs:
             exit $LASTEXITCODE
           }
 
-          if ($command -in @('tests','journal-report')) {
+          if ($command -in @('tests','journal-report','shadow-report')) {
             git pull --ff-only origin feature/gexy
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
@@ -80,6 +81,11 @@ jobs:
 
           if ($command -eq 'journal-report') {
             python scripts\gexy_journal_report.py
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'shadow-report') {
+            python scripts\gexy_shadow_report.py
             exit $LASTEXITCODE
           }
 
