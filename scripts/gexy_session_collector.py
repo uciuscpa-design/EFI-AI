@@ -36,7 +36,19 @@ def _run_script(script_name: str, *args: str) -> dict[str, object]:
 
 def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
     observed_at = datetime.now(timezone.utc)
-    if not is_alpaca_market_session(observed_at):
+    try:
+        in_session = is_alpaca_market_session(observed_at)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "stage": "market_session",
+            "reason": "calendar_unavailable",
+            "observed_at": observed_at.isoformat(),
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    if not in_session:
         return {
             "status": "skipped",
             "reason": "outside_alpaca_market_session",
@@ -75,11 +87,12 @@ def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
 
 
 def run_loop(*, interval_seconds: int = 60, tolerance_seconds: int = 90) -> int:
-    """Wait for the session, collect every interval, then stop after session close.
+    """Wait for the session, collect every interval, and survive transient failures.
 
-    Starting this process before the regular session is safe: skipped cycles are treated
-    as a waiting state until at least one successful in-session collection has occurred.
-    After collection has begun, the first outside-session observation ends the process.
+    Starting this process before the regular session is safe. Calendar/network/API
+    errors are logged as error payloads and retried after the normal interval rather
+    than terminating the all-day collector. Once at least one successful in-session
+    cycle has occurred, the first confirmed outside-session observation ends the run.
     """
     collected_in_session = False
     while True:
@@ -87,8 +100,6 @@ def run_loop(*, interval_seconds: int = 60, tolerance_seconds: int = 90) -> int:
         print(json.dumps(payload, sort_keys=True), flush=True)
 
         status = payload.get("status")
-        if status == "error":
-            return 2
         if status == "ok":
             collected_in_session = True
             time.sleep(interval_seconds)
@@ -96,7 +107,8 @@ def run_loop(*, interval_seconds: int = 60, tolerance_seconds: int = 90) -> int:
         if status == "skipped" and collected_in_session:
             return 0
 
-        # Before the first successful session cycle, remain armed and wait for open.
+        # Before open, or after a transient network/API/script failure, remain armed.
+        # A later successful calendar check will either resume collection or confirm close.
         time.sleep(interval_seconds)
 
 
