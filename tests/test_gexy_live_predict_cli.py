@@ -68,7 +68,7 @@ def test_main_emits_and_journals_multi_horizon_bundle(monkeypatch, tmp_path, cap
         acceleration_bias="up",
     )
     fake_result = SimpleNamespace(
-        timestamp=datetime(2026, 8, 13, 13, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 8, 13, 14, 0, tzinfo=timezone.utc),
         spot=7749.2,
         quote_times=(),
         pipeline=SimpleNamespace(
