@@ -34,26 +34,50 @@ def _run_script(script_name: str, *args: str) -> dict[str, object]:
     return payload
 
 
+def _finish_cycle(
+    payload: dict[str, object],
+    *,
+    cycle_started_at: datetime,
+    cycle_started_monotonic: float,
+) -> dict[str, object]:
+    cycle_finished_at = datetime.now(timezone.utc)
+    enriched = dict(payload)
+    enriched["cycle_started_at"] = cycle_started_at.isoformat()
+    enriched["cycle_finished_at"] = cycle_finished_at.isoformat()
+    enriched["cycle_duration_seconds"] = max(0.0, time.monotonic() - cycle_started_monotonic)
+    return enriched
+
+
 def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
-    observed_at = datetime.now(timezone.utc)
+    cycle_started_at = datetime.now(timezone.utc)
+    cycle_started_monotonic = time.monotonic()
+    observed_at = cycle_started_at
     try:
         in_session = is_alpaca_market_session(observed_at)
     except Exception as exc:
-        return {
-            "status": "error",
-            "stage": "market_session",
-            "reason": "calendar_unavailable",
-            "observed_at": observed_at.isoformat(),
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-        }
+        return _finish_cycle(
+            {
+                "status": "error",
+                "stage": "market_session",
+                "reason": "calendar_unavailable",
+                "observed_at": observed_at.isoformat(),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+            cycle_started_at=cycle_started_at,
+            cycle_started_monotonic=cycle_started_monotonic,
+        )
 
     if not in_session:
-        return {
-            "status": "skipped",
-            "reason": "outside_alpaca_market_session",
-            "observed_at": observed_at.isoformat(),
-        }
+        return _finish_cycle(
+            {
+                "status": "skipped",
+                "reason": "outside_alpaca_market_session",
+                "observed_at": observed_at.isoformat(),
+            },
+            cycle_started_at=cycle_started_at,
+            cycle_started_monotonic=cycle_started_monotonic,
+        )
 
     resolution = _run_script(
         "gexy_resolve_due.py",
@@ -61,60 +85,109 @@ def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
         str(tolerance_seconds),
     )
     if int(resolution.get("exit_code", 1)) != 0:
-        return {
-            "status": "error",
-            "stage": "resolve_due",
-            "observed_at": observed_at.isoformat(),
-            "resolution": resolution,
-        }
+        return _finish_cycle(
+            {
+                "status": "error",
+                "stage": "resolve_due",
+                "observed_at": observed_at.isoformat(),
+                "resolution": resolution,
+            },
+            cycle_started_at=cycle_started_at,
+            cycle_started_monotonic=cycle_started_monotonic,
+        )
 
     prediction = _run_script("gexy_live_predict.py", "--horizon", "30")
     if int(prediction.get("exit_code", 1)) != 0:
-        return {
-            "status": "error",
-            "stage": "live_predict",
+        return _finish_cycle(
+            {
+                "status": "error",
+                "stage": "live_predict",
+                "observed_at": observed_at.isoformat(),
+                "resolution": resolution,
+                "prediction": prediction,
+            },
+            cycle_started_at=cycle_started_at,
+            cycle_started_monotonic=cycle_started_monotonic,
+        )
+
+    return _finish_cycle(
+        {
+            "status": "ok",
             "observed_at": observed_at.isoformat(),
             "resolution": resolution,
             "prediction": prediction,
-        }
+        },
+        cycle_started_at=cycle_started_at,
+        cycle_started_monotonic=cycle_started_monotonic,
+    )
 
-    return {
-        "status": "ok",
-        "observed_at": observed_at.isoformat(),
-        "resolution": resolution,
-        "prediction": prediction,
+
+def _schedule_after_cycle(
+    *,
+    scheduled_tick: float,
+    cycle_started: float,
+    interval_seconds: int,
+) -> tuple[dict[str, object], float]:
+    """Return scheduler diagnostics and the next future wall-clock tick.
+
+    Ticks remain anchored to the original monotonic schedule. Slow cycles do not
+    add another full interval after completion, and missed ticks are skipped rather
+    than replayed in a burst.
+    """
+    finished = time.monotonic()
+    cycle_elapsed = max(0.0, finished - cycle_started)
+    next_tick = scheduled_tick + interval_seconds
+    missed_intervals = 0
+    while next_tick <= finished:
+        next_tick += interval_seconds
+        missed_intervals += 1
+    sleep_seconds = max(0.0, next_tick - finished)
+    scheduler = {
+        "target_interval_seconds": interval_seconds,
+        "start_lag_seconds": max(0.0, cycle_started - scheduled_tick),
+        "cycle_elapsed_seconds": cycle_elapsed,
+        "overrun_seconds": max(0.0, cycle_elapsed - interval_seconds),
+        "missed_intervals": missed_intervals,
+        "sleep_seconds": sleep_seconds,
     }
+    return scheduler, next_tick
 
 
 def run_loop(*, interval_seconds: int = 60, tolerance_seconds: int = 90) -> int:
-    """Wait for the session, collect every interval, and survive transient failures.
+    """Wait for the session and collect on anchored wall-clock target ticks.
 
     Starting this process before the regular session is safe. Calendar/network/API
-    errors are logged as error payloads and retried after the normal interval rather
-    than terminating the all-day collector. Once at least one successful in-session
-    cycle has occurred, the first confirmed outside-session observation ends the run.
+    errors are logged and retried. After each cycle, the next start stays anchored
+    to the target interval instead of sleeping a full interval after expensive work.
+    If a cycle overruns one or more ticks, those ticks are recorded and skipped—no
+    burst catch-up is attempted. Once an armed session is confirmed closed, exit.
     """
     collected_in_session = False
+    scheduled_tick = time.monotonic()
     while True:
+        cycle_started = time.monotonic()
         payload = run_cycle(tolerance_seconds=tolerance_seconds)
+        scheduler, next_tick = _schedule_after_cycle(
+            scheduled_tick=scheduled_tick,
+            cycle_started=cycle_started,
+            interval_seconds=interval_seconds,
+        )
+        payload["scheduler"] = scheduler
         print(json.dumps(payload, sort_keys=True), flush=True)
 
         status = payload.get("status")
         if status == "ok":
             collected_in_session = True
-            time.sleep(interval_seconds)
-            continue
-        if status == "skipped" and collected_in_session:
+        elif status == "skipped" and collected_in_session:
             return 0
 
-        # Before open, or after a transient network/API/script failure, remain armed.
-        # A later successful calendar check will either resume collection or confirm close.
-        time.sleep(interval_seconds)
+        scheduled_tick = next_tick
+        time.sleep(float(scheduler["sleep_seconds"]))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Collect and resolve GEXY forecasts once per minute during Alpaca market sessions"
+        description="Collect and resolve GEXY forecasts on anchored target intervals during Alpaca market sessions"
     )
     parser.add_argument("--interval-seconds", type=int, default=60)
     parser.add_argument("--tolerance-seconds", type=int, default=90)
