@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from .prediction_journal import PredictionJournalEntry
+
 
 def validate_horizon_walk_forward(
     outcomes: Iterable[bool],
@@ -100,3 +102,38 @@ def select_shortest_walk_forward_validated_horizon(
         "evaluated": evaluated,
         "automatic_promotion": False,
     }
+
+
+def outcomes_by_horizon_from_entries(
+    entries: Iterable[PredictionJournalEntry],
+) -> dict[int, list[bool]]:
+    """Build chronological directional hit/miss sequences from resolved journal entries."""
+    resolved = sorted(
+        (
+            entry
+            for entry in entries
+            if entry.resolved and entry.directional_hit is not None
+        ),
+        key=lambda entry: entry.created_at,
+    )
+    grouped: dict[int, list[bool]] = {}
+    for entry in resolved:
+        horizon = int(entry.prediction.horizon_minutes)
+        grouped.setdefault(horizon, []).append(bool(entry.directional_hit))
+    return grouped
+
+
+def select_shortest_walk_forward_validated_horizon_from_entries(
+    entries: Iterable[PredictionJournalEntry],
+    *,
+    min_validation_samples: int = 100,
+    min_success_rate: float = 0.70,
+    validation_fraction: float = 0.25,
+) -> dict[str, object]:
+    """Run the advisory shortest-horizon walk-forward gate on real journal entries."""
+    return select_shortest_walk_forward_validated_horizon(
+        outcomes_by_horizon_from_entries(entries),
+        min_validation_samples=min_validation_samples,
+        min_success_rate=min_success_rate,
+        validation_fraction=validation_fraction,
+    )
