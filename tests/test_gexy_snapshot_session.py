@@ -38,7 +38,7 @@ def test_snapshot_session_copies_and_hashes_research_files(tmp_path, monkeypatch
     assert metadata["session_date"] == "2026-08-14"
 
 
-def test_snapshot_auto_detects_large_observation_gap(tmp_path, monkeypatch):
+def test_snapshot_auto_detects_large_observation_gap_from_multiline_json(tmp_path, monkeypatch):
     monkeypatch.setattr(MODULE, "_git_head", lambda: None)
     data_dir = tmp_path / "data" / "gexy"
     logs_dir = data_dir / "logs"
@@ -46,11 +46,22 @@ def test_snapshot_auto_detects_large_observation_gap(tmp_path, monkeypatch):
     for name in ("live_predictions.jsonl", "shadow_predictions.jsonl", "gax_shadow.jsonl"):
         (data_dir / name).write_text("", encoding="utf-8")
     (logs_dir / "session-2026-08-14.log").write_text(
-        '\n'.join([
-            '{"status":"ok","observed_at":"2026-08-14T18:01:22+00:00"}',
-            '{"status":"ok","observed_at":"2026-08-14T18:02:22+00:00"}',
-            '{"status":"ok","observed_at":"2026-08-14T18:48:40+00:00"}',
-        ]) + "\n",
+        """[2026-08-14T10:00:00-07:00] GEXY session collector starting
+{
+  \"observed_at\": \"2026-08-14T18:01:22+00:00\",
+  \"status\": \"ok\"
+}
+noise between payloads
+{
+  \"observed_at\": \"2026-08-14T18:02:22+00:00\",
+  \"status\": \"ok\"
+}
+[2026-08-14T11:48:40-07:00] GEXY session collector starting
+{
+  \"observed_at\": \"2026-08-14T18:48:40+00:00\",
+  \"status\": \"ok\"
+}
+""",
         encoding="utf-8",
     )
 
@@ -62,6 +73,15 @@ def test_snapshot_auto_detects_large_observation_gap(tmp_path, monkeypatch):
     assert gap["start"] == "2026-08-14T18:02:22+00:00"
     assert gap["end"] == "2026-08-14T18:48:40+00:00"
     assert gap["duration_seconds"] == 2778.0
+
+
+def test_json_scanner_skips_non_json_braces():
+    payloads = list(
+        MODULE._json_objects_from_text(
+            'prefix {not json} middle {"observed_at":"2026-08-14T18:01:22+00:00"} suffix'
+        )
+    )
+    assert payloads == [{"observed_at": "2026-08-14T18:01:22+00:00"}]
 
 
 def test_snapshot_refuses_overwrite_without_force(tmp_path, monkeypatch):
