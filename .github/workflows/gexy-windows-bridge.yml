@@ -30,6 +30,7 @@ on:
           - session-log-tail
           - journal-report
           - shadow-report
+          - shadow-diagnostics
 
 jobs:
   gexy:
@@ -51,7 +52,7 @@ jobs:
             $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
             $command = "$content".Trim()
           }
-          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','collect-session','install-session-task','start-session-task','session-task-status','session-log-tail','journal-report','shadow-report')
+          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','collect-session','install-session-task','start-session-task','session-task-status','session-log-tail','journal-report','shadow-report','shadow-diagnostics')
           if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
           "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         env:
@@ -75,7 +76,7 @@ jobs:
             exit $LASTEXITCODE
           }
 
-          if ($command -in @('tests','journal-report','shadow-report','install-session-task','start-session-task')) {
+          if ($command -in @('tests','journal-report','shadow-report','shadow-diagnostics','install-session-task','start-session-task')) {
             git pull --ff-only origin feature/gexy
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
@@ -92,6 +93,11 @@ jobs:
 
           if ($command -eq 'shadow-report') {
             python scripts\gexy_shadow_report.py
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'shadow-diagnostics') {
+            python scripts\gexy_shadow_diagnostics.py
             exit $LASTEXITCODE
           }
 
