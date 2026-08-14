@@ -3,44 +3,139 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>GEXY</title>
+  <title>GEXY Live</title>
   <style>
-    html,body{margin:0;height:100%;font-family:system-ui,sans-serif;background:#0b0d10;color:#e8edf2}
-    .window{height:100%;display:flex;flex-direction:column}
-    .toolbar{display:flex;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #242a31;flex-wrap:wrap}
-    .toolbar label{font-size:12px;color:#9ca8b4}.toolbar select,.toolbar button{background:#141920;color:#e8edf2;border:1px solid #303943;border-radius:6px;padding:6px 9px}
-    .chart{position:relative;flex:1;min-height:360px;overflow:hidden;background:linear-gradient(#10151b,#0b0d10)}
-    .grid{position:absolute;inset:0;background-image:linear-gradient(#20262d 1px,transparent 1px),linear-gradient(90deg,#20262d 1px,transparent 1px);background-size:10% 20%;opacity:.55}
-    canvas{position:absolute;inset:0;width:100%;height:100%}
-    .legend{position:absolute;top:12px;left:12px;padding:9px;background:#0b0d10cc;border:1px solid #303943;border-radius:7px;font-size:12px}
+    :root{color-scheme:dark}
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#090c10;color:#e8edf2}
+    .window{height:100%;display:flex;flex-direction:column;min-height:620px}
+    .toolbar{display:flex;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid #242a31;flex-wrap:wrap;background:#0d1117}
+    .brand{font-size:18px;letter-spacing:.08em}.brand span{font-size:10px;color:#8b98a5;letter-spacing:.04em;margin-left:7px}
+    label{font-size:12px;color:#a7b2bd}.toolbar select,.toolbar button{background:#141a22;color:#e8edf2;border:1px solid #303943;border-radius:6px;padding:6px 9px}
+    .toolbar button{cursor:pointer}.toolbar button:hover{border-color:#6f7d8b}
     .status{font-size:12px;color:#9ca8b4;margin-left:auto}
+    .cards{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:1px;background:#252c34;border-bottom:1px solid #252c34}
+    .card{background:#0d1117;padding:10px 12px;min-height:62px}.card .k{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#7f8b96}.card .v{font-size:17px;font-weight:650;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card .s{font-size:10px;color:#7f8b96;margin-top:2px}
+    .chart{position:relative;flex:1;min-height:390px;overflow:hidden;background:linear-gradient(#10151b,#090c10)}
+    canvas{position:absolute;inset:0;width:100%;height:100%}
+    .legend{position:absolute;top:12px;left:12px;padding:8px 10px;background:#090c10d9;border:1px solid #303943;border-radius:7px;font-size:11px;line-height:1.45;max-width:360px}
+    .foot{padding:7px 13px;border-top:1px solid #242a31;background:#0d1117;color:#7f8b96;font-size:10px}
+    @media(max-width:980px){.cards{grid-template-columns:repeat(3,1fr)}.status{width:100%;margin-left:0}}
   </style>
 </head>
 <body>
 <div class="window">
   <div class="toolbar">
-    <strong>GEXY</strong>
-    <label>Horizon <select id="horizon"><option>1m</option><option selected>5m</option><option>15m</option><option>30m</option><option>60m</option></select></label>
+    <div class="brand"><strong>GEXY</strong><span>SPX HEDGE FORECAST</span></div>
+    <label>Horizon <select id="horizon"></select></label>
+    <label>Source <select id="source"><option value="auto" selected>Auto</option><option value="production">Production</option><option value="shadow">Shadow</option></select></label>
     <label><input id="overlay" type="checkbox" checked> Forecast overlay</label>
-    <label><input id="bands" type="checkbox" checked> Confidence band</label>
-    <label><input id="levels" type="checkbox" checked> Gamma levels</label>
-    <button id="fit">Fit chart</button>
-    <span class="status" id="status">Replay / waiting for feed</span>
+    <label><input id="bands" type="checkbox" checked> Confidence guide</label>
+    <label><input id="levels" type="checkbox" checked> Target / invalidation</label>
+    <button id="refresh">Refresh</button>
+    <span class="status" id="status">Connecting…</span>
   </div>
+
+  <div class="cards">
+    <div class="card"><div class="k">SPX reference</div><div class="v" id="spot">—</div><div class="s" id="stamp">waiting for journal</div></div>
+    <div class="card"><div class="k">Direction</div><div class="v" id="direction">—</div><div class="s" id="regime">—</div></div>
+    <div class="card"><div class="k">Expected move</div><div class="v" id="move">—</div><div class="s" id="forecastSpot">—</div></div>
+    <div class="card"><div class="k">Primary target</div><div class="v" id="target">—</div><div class="s" id="invalidation">—</div></div>
+    <div class="card"><div class="k">Model confidence</div><div class="v" id="confidence">—</div><div class="s">model score, not probability</div></div>
+    <div class="card"><div class="k">Loaded hit rate</div><div class="v" id="accuracy">—</div><div class="s" id="resolved">resolved journal sample</div></div>
+  </div>
+
   <div class="chart" id="chart">
-    <div class="grid"></div>
     <canvas id="price"></canvas>
-    <div class="legend" id="legend">SPX — GEXY forecast</div>
+    <div class="legend" id="legend">Sampled SPX candles from GEXY observations. Dashed extension is the selected-horizon forecast.</div>
   </div>
+  <div class="foot">Research/paper mode. Candles are reconstructed from GEXY's sampled SPX reference observations, not exchange-native OHLC bars. No automatic trade execution.</div>
 </div>
 <script>
+const horizon=document.getElementById('horizon');
+for(let i=1;i<=60;i++){const o=document.createElement('option');o.value=String(i);o.textContent=`${i}m`;if(i===5)o.selected=true;horizon.appendChild(o)}
+const source=document.getElementById('source');
 const canvas=document.getElementById('price'),ctx=canvas.getContext('2d');
-const resize=()=>{canvas.width=canvas.clientWidth*devicePixelRatio;canvas.height=canvas.clientHeight*devicePixelRatio;draw()};
+let points=[];
+
+function fnum(v,d=2){return Number.isFinite(Number(v))?Number(v).toFixed(d):'—'}
+function signed(v){if(!Number.isFinite(Number(v)))return '—';const n=Number(v);return `${n>=0?'+':''}${n.toFixed(2)} pts`}
+function pct(v){return Number.isFinite(Number(v))?`${(Number(v)*100).toFixed(1)}%`:'—'}
+function latest(){return points.length?points[points.length-1]:null}
+
+function setCards(){
+  const p=latest();
+  if(!p){['spot','direction','move','forecastSpot','target','invalidation','confidence','accuracy'].forEach(id=>document.getElementById(id).textContent='—');return}
+  document.getElementById('spot').textContent=fnum(p.spot);
+  document.getElementById('stamp').textContent=new Date(p.timestamp).toLocaleString();
+  document.getElementById('direction').textContent=String(p.direction||'—').toUpperCase();
+  document.getElementById('regime').textContent=p.regime||'—';
+  document.getElementById('move').textContent=signed(p.expected_move_points);
+  document.getElementById('forecastSpot').textContent=`forecast ${fnum(p.forecast_spot)}`;
+  document.getElementById('target').textContent=fnum(p.primary_target);
+  document.getElementById('invalidation').textContent=`invalidation ${fnum(p.invalidation_level)}`;
+  document.getElementById('confidence').textContent=pct(p.confidence);
+  const scored=points.filter(x=>x.directional_hit!==null&&x.directional_hit!==undefined);
+  const hits=scored.filter(x=>x.directional_hit===true).length;
+  document.getElementById('accuracy').textContent=scored.length?pct(hits/scored.length):'—';
+  document.getElementById('resolved').textContent=`${scored.length} resolved of ${points.length} loaded`;
+}
+
+function candlesFromPoints(rows,groupSize=5){
+  const out=[];
+  for(let i=0;i<rows.length;i+=groupSize){
+    const g=rows.slice(i,i+groupSize); if(!g.length)continue;
+    const vals=g.map(x=>Number(x.spot)).filter(Number.isFinite); if(!vals.length)continue;
+    out.push({t:g[g.length-1].timestamp,o:vals[0],h:Math.max(...vals),l:Math.min(...vals),c:vals[vals.length-1]});
+  }
+  return out;
+}
+
+function draw(){
+  const w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);if(!points.length)return;
+  const candles=candlesFromPoints(points,5);const p=latest();
+  const values=[];candles.forEach(c=>values.push(c.h,c.l));
+  if(document.getElementById('overlay').checked&&p)values.push(Number(p.forecast_spot));
+  if(document.getElementById('levels').checked&&p){if(Number.isFinite(Number(p.primary_target)))values.push(Number(p.primary_target));if(Number.isFinite(Number(p.invalidation_level)))values.push(Number(p.invalidation_level))}
+  let lo=Math.min(...values),hi=Math.max(...values);let span=Math.max(hi-lo,4);lo-=span*.08;hi+=span*.08;span=hi-lo;
+  const padL=58,padR=78,padT=28,padB=35;const plotW=w-padL-padR,plotH=h-padT-padB;
+  const y=v=>padT+(hi-v)/span*plotH;
+  const step=plotW/Math.max(candles.length+5,10);const x=i=>padL+(i+.5)*step;
+
+  ctx.font=`${11*devicePixelRatio}px system-ui`;ctx.fillStyle='#83909d';ctx.strokeStyle='#202832';ctx.lineWidth=devicePixelRatio;
+  for(let i=0;i<=5;i++){const yy=padT+i*plotH/5;ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(w-padR,yy);ctx.stroke();const v=hi-i*span/5;ctx.fillText(v.toFixed(1),5*devicePixelRatio,yy+4*devicePixelRatio)}
+
+  const bodyW=Math.max(2*devicePixelRatio,step*.52);
+  candles.forEach((c,i)=>{const xx=x(i);const up=c.c>=c.o;ctx.strokeStyle=up?'#9dd9b8':'#ee9b9b';ctx.fillStyle=ctx.strokeStyle;ctx.beginPath();ctx.moveTo(xx,y(c.h));ctx.lineTo(xx,y(c.l));ctx.stroke();const top=Math.min(y(c.o),y(c.c)),bottom=Math.max(y(c.o),y(c.c));ctx.fillRect(xx-bodyW/2,top,bodyW,Math.max(bottom-top,1.5*devicePixelRatio))});
+
+  if(document.getElementById('levels').checked&&p){
+    const lines=[[p.primary_target,'target','#d4bd78'],[p.invalidation_level,'invalidation','#c78bd4']];
+    lines.forEach(([value,label,color])=>{const v=Number(value);if(!Number.isFinite(v))return;const yy=y(v);ctx.strokeStyle=color;ctx.setLineDash([4*devicePixelRatio,4*devicePixelRatio]);ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(w-padR,yy);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=color;ctx.fillText(`${label} ${v.toFixed(1)}`,w-padR+6*devicePixelRatio,yy+4*devicePixelRatio)});
+  }
+
+  if(document.getElementById('overlay').checked&&p&&candles.length){
+    const startX=x(candles.length-1),endX=x(candles.length+4),startY=y(Number(p.spot)),endY=y(Number(p.forecast_spot));
+    if(document.getElementById('bands').checked){const move=Math.abs(Number(p.expected_move_points)||0);const conf=Number(p.confidence)||0;const uncertainty=Math.max(move*(1-conf),.5);const top=y(Number(p.forecast_spot)+uncertainty),bottom=y(Number(p.forecast_spot)-uncertainty);ctx.fillStyle='#6aa7ff22';ctx.fillRect(startX,Math.min(top,bottom),endX-startX,Math.abs(bottom-top))}
+    ctx.strokeStyle='#6aa7ff';ctx.lineWidth=2*devicePixelRatio;ctx.setLineDash([8*devicePixelRatio,5*devicePixelRatio]);ctx.beginPath();ctx.moveTo(startX,startY);ctx.lineTo(endX,endY);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#6aa7ff';ctx.fillText(`${p.horizon_minutes}m ${p.direction} → ${Number(p.forecast_spot).toFixed(1)}`,Math.min(endX,w-padR-145*devicePixelRatio),endY-8*devicePixelRatio);
+  }
+}
+
+function resize(){canvas.width=Math.floor(canvas.clientWidth*devicePixelRatio);canvas.height=Math.floor(canvas.clientHeight*devicePixelRatio);draw()}
 window.addEventListener('resize',resize);
-const prices=[6500,6503,6499,6506,6504,6509,6507,6512,6510,6515,6513,6518];
-function draw(){const w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);const pad=55,lo=Math.min(...prices)-8,hi=Math.max(...prices)+8;const y=v=>h-pad-(v-lo)/(hi-lo)*(h-2*pad);const x=i=>pad+i/(prices.length-1)*(w-2*pad);ctx.lineWidth=2;ctx.beginPath();prices.forEach((p,i)=>i?ctx.lineTo(x(i),y(p)):ctx.moveTo(x(i),y(p)));ctx.stroke();
- if(document.getElementById('overlay').checked){const move={"1m":2,"5m":5,"15m":9,"30m":14,"60m":20}[document.getElementById('horizon').value];const base=prices.at(-1),future=base+move;ctx.setLineDash([8,5]);ctx.beginPath();ctx.moveTo(x(prices.length-1),y(base));ctx.lineTo(w-pad,y(future));ctx.stroke();ctx.setLineDash([]);if(document.getElementById('bands').checked){ctx.globalAlpha=.15;ctx.fillRect(x(prices.length-1),Math.min(y(base+move*1.5),y(base-move*.5)),w-pad-x(prices.length-1),Math.abs(y(base-move*.5)-y(base+move*1.5)));ctx.globalAlpha=1;}}
- if(document.getElementById('levels').checked){ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(pad,y(6500));ctx.lineTo(w-pad,y(6500));ctx.stroke();ctx.setLineDash([])} }
-['overlay','bands','levels','horizon'].forEach(id=>document.getElementById(id).addEventListener('change',draw));document.getElementById('fit').onclick=()=>{document.getElementById('status').textContent='Chart fitted';draw()};resize();
+
+async function refresh(){
+  const status=document.getElementById('status');status.textContent='Loading…';
+  try{
+    const url=`/v1/live/history?horizon=${encodeURIComponent(horizon.value)}&source=${encodeURIComponent(source.value)}&limit=600`;
+    const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);
+    const data=await r.json();points=Array.isArray(data.points)?data.points:[];setCards();draw();
+    status.textContent=points.length?`${data.source} • ${points.length} observations • ${new Date().toLocaleTimeString()}`:`${data.source} • no ${horizon.value}m data yet`;
+  }catch(err){points=[];setCards();draw();status.textContent=`Feed error: ${err.message}`}
+}
+
+['overlay','bands','levels'].forEach(id=>document.getElementById(id).addEventListener('change',draw));
+horizon.addEventListener('change',refresh);source.addEventListener('change',refresh);document.getElementById('refresh').addEventListener('click',refresh);
+resize();refresh();setInterval(refresh,15000);
 </script>
-</body></html>
+</body>
+</html>
