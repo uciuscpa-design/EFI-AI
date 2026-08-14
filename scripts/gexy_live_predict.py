@@ -9,6 +9,7 @@ from urllib.error import HTTPError
 
 from packages.gexy.alpaca_live import predict_from_alpaca
 from packages.gexy.gax_shadow_journal import append_gax_shadow, make_gax_shadow_record
+from packages.gexy.market_session import is_regular_spx_cash_session
 from packages.gexy.prediction_journal import append_entry, make_entry
 
 
@@ -41,6 +42,11 @@ def main() -> int:
         help="append-only JSONL path for experimental GAX shadow observations",
     )
     parser.add_argument("--no-journal", action="store_true", help="do not persist predictions or GAX shadow records")
+    parser.add_argument(
+        "--journal-outside-regular-session",
+        action="store_true",
+        help="explicitly allow journaling outside the regular 09:30-16:00 ET cash session",
+    )
     args = parser.parse_args()
 
     if not _paper_key_shape_is_plausible():
@@ -71,9 +77,15 @@ def main() -> int:
         return 2
 
     forecasts = result.pipeline.multi_horizon.predictions
+    regular_session = is_regular_spx_cash_session(result.timestamp)
+    journaling_allowed = (
+        not args.no_journal
+        and (regular_session or args.journal_outside_regular_session)
+    )
+
     journal_path: str | None = None
     gax_shadow_path: str | None = None
-    if not args.no_journal:
+    if journaling_allowed:
         path = Path(args.journal)
         shadow_path = Path(args.gax_shadow_journal)
         for prediction in forecasts:
@@ -108,10 +120,17 @@ def main() -> int:
         "surface": asdict(result.pipeline.surface_features),
         "gax_shadow": asdict(result.pipeline.gax_features),
         "quote_count": len(result.quote_times),
+        "regular_spx_cash_session": regular_session,
+        "scoreable_journaling_allowed": journaling_allowed,
+        "journal_skip_reason": (
+            None
+            if journaling_allowed
+            else "disabled_by_flag" if args.no_journal else "outside_regular_spx_cash_session"
+        ),
         "journal_path": journal_path,
         "gax_shadow_journal_path": gax_shadow_path,
-        "journaled_forecasts": 0 if args.no_journal else len(forecasts),
-        "journaled_gax_shadows": 0 if args.no_journal else len(forecasts),
+        "journaled_forecasts": len(forecasts) if journaling_allowed else 0,
+        "journaled_gax_shadows": len(forecasts) if journaling_allowed else 0,
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
