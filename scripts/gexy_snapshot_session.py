@@ -69,21 +69,50 @@ def _json_objects_from_text(text: str) -> Iterator[dict[str, object]]:
             yield payload
 
 
+def _timestamp_from_payload(payload: dict[str, object]) -> datetime | None:
+    value = payload.get("observed_at")
+    if not isinstance(value, str):
+        return None
+    try:
+        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return timestamp if timestamp.tzinfo is not None else None
+
+
 def _observed_times_from_log(path: Path) -> list[datetime]:
-    observed: list[datetime] = []
+    """Read collector-cycle timestamps from the actual mixed log format.
+
+    The live launcher writes one compact JSON object per collector cycle, mixed
+    with plain-text lifecycle lines. Prefer exact per-line JSON parsing so braces
+    inside nested payloads cannot confuse the generic scanner. Keep the scanner
+    only as a compatibility fallback for older multiline JSON logs.
+    """
     if not path.exists():
-        return observed
+        return []
+
     text = path.read_text(encoding="utf-8", errors="replace")
-    for payload in _json_objects_from_text(text):
-        value = payload.get("observed_at")
-        if not isinstance(value, str):
+    observed: list[datetime] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("{"):
             continue
         try:
-            timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
             continue
-        if timestamp.tzinfo is not None:
+        if not isinstance(payload, dict):
+            continue
+        timestamp = _timestamp_from_payload(payload)
+        if timestamp is not None:
             observed.append(timestamp)
+
+    if not observed:
+        for payload in _json_objects_from_text(text):
+            timestamp = _timestamp_from_payload(payload)
+            if timestamp is not None:
+                observed.append(timestamp)
+
     return sorted(set(observed))
 
 
