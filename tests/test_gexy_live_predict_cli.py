@@ -80,6 +80,7 @@ def test_main_emits_and_journals_multi_horizon_bundle(monkeypatch, tmp_path, cap
     )
     monkeypatch.setenv("APCA_API_KEY_ID", "PK123456789012345678")
     monkeypatch.setattr(MODULE, "predict_from_alpaca", lambda **_: fake_result)
+    monkeypatch.setattr(MODULE, "is_alpaca_market_session", lambda _: True)
     journal = tmp_path / "live_predictions.jsonl"
     shadow = tmp_path / "gax_shadow.jsonl"
     monkeypatch.setattr(
