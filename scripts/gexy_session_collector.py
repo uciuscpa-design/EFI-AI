@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from packages.gexy.alpaca_calendar import is_alpaca_market_session
+from packages.gexy.alpaca_calendar import AlpacaMarketSession, alpaca_market_session_window
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,6 +34,14 @@ def _run_script(script_name: str, *args: str) -> dict[str, object]:
     return payload
 
 
+def _session_metadata(window: AlpacaMarketSession | None) -> dict[str, object]:
+    return {
+        "market_session_date": window.session_date if window else None,
+        "market_session_open_at": window.open_at.isoformat() if window else None,
+        "market_session_close_at": window.close_at.isoformat() if window else None,
+    }
+
+
 def _finish_cycle(
     payload: dict[str, object],
     *,
@@ -53,7 +61,7 @@ def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
     cycle_started_monotonic = time.monotonic()
     observed_at = cycle_started_at
     try:
-        in_session = is_alpaca_market_session(observed_at)
+        session_window = alpaca_market_session_window(observed_at)
     except Exception as exc:
         return _finish_cycle(
             {
@@ -63,17 +71,20 @@ def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
                 "observed_at": observed_at.isoformat(),
                 "error_type": type(exc).__name__,
                 "error": str(exc),
+                **_session_metadata(None),
             },
             cycle_started_at=cycle_started_at,
             cycle_started_monotonic=cycle_started_monotonic,
         )
 
-    if not in_session:
+    session_meta = _session_metadata(session_window)
+    if session_window is None or not session_window.contains(observed_at):
         return _finish_cycle(
             {
                 "status": "skipped",
                 "reason": "outside_alpaca_market_session",
                 "observed_at": observed_at.isoformat(),
+                **session_meta,
             },
             cycle_started_at=cycle_started_at,
             cycle_started_monotonic=cycle_started_monotonic,
@@ -91,6 +102,7 @@ def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
                 "stage": "resolve_due",
                 "observed_at": observed_at.isoformat(),
                 "resolution": resolution,
+                **session_meta,
             },
             cycle_started_at=cycle_started_at,
             cycle_started_monotonic=cycle_started_monotonic,
@@ -105,6 +117,7 @@ def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
                 "observed_at": observed_at.isoformat(),
                 "resolution": resolution,
                 "prediction": prediction,
+                **session_meta,
             },
             cycle_started_at=cycle_started_at,
             cycle_started_monotonic=cycle_started_monotonic,
@@ -116,6 +129,7 @@ def run_cycle(*, tolerance_seconds: int = 90) -> dict[str, object]:
             "observed_at": observed_at.isoformat(),
             "resolution": resolution,
             "prediction": prediction,
+            **session_meta,
         },
         cycle_started_at=cycle_started_at,
         cycle_started_monotonic=cycle_started_monotonic,
