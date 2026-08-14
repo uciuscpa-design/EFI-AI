@@ -40,7 +40,7 @@ def _entry(*, horizon: int, direction: str, move: float, hit: bool, confidence: 
 def test_build_diagnostics_identifies_raw_and_inverted_behavior(tmp_path):
     path = tmp_path / "shadow.jsonl"
     rows = []
-    for i in range(30):
+    for _ in range(30):
         rows.append(_entry(horizon=1, direction="up", move=-1.0, hit=False))
         rows.append(_entry(horizon=20, direction="up", move=1.0, hit=True))
     rewrite_entries(path, rows)
@@ -52,6 +52,30 @@ def test_build_diagnostics_identifies_raw_and_inverted_behavior(tmp_path):
     assert report["by_horizon"]["1"]["inverted_directional_accuracy"] == 1.0
     assert report["best_raw_horizon_min_30"]["horizon_minutes"] == 20
     assert report["best_inverted_horizon_min_30"]["horizon_minutes"] == 1
+    assert report["best_horizon_direction_min_30"]["horizon_minutes"] == 20
+    assert report["best_horizon_direction_min_30"]["predicted_direction"] == "up"
+    assert report["overall"]["best_constant_direction_accuracy"] == 0.5
+    assert report["overall"]["model_lift_vs_best_constant"] == 0.0
+
+
+def test_build_diagnostics_counterfactual_does_not_hide_constant_baseline(tmp_path):
+    path = tmp_path / "shadow.jsonl"
+    rows = []
+    for _ in range(30):
+        rows.append(_entry(horizon=20, direction="down", move=-1.0, hit=True))
+        rows.append(_entry(horizon=20, direction="up", move=-1.0, hit=False))
+    rewrite_entries(path, rows)
+
+    report = MODULE.build_diagnostics(path)
+
+    assert report["overall"]["directional_accuracy"] == 0.5
+    assert report["overall"]["always_down_accuracy"] == 1.0
+    assert report["overall"]["model_lift_vs_best_constant"] == -0.5
+    assert report["counterfactual_keep_down_flip_up"]["scored"] == 60
+    assert report["counterfactual_keep_down_flip_up"]["directional_accuracy"] == 1.0
+    assert report["counterfactual_keep_down_flip_up"]["advisory_only"] is True
+    assert report["by_horizon_direction"]["20"]["down"]["directional_accuracy"] == 1.0
+    assert report["by_horizon_direction"]["20"]["up"]["directional_accuracy"] == 0.0
 
 
 def test_build_diagnostics_reports_confidence_variation(tmp_path):
