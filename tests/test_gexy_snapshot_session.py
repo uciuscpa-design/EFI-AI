@@ -27,8 +27,10 @@ def test_snapshot_session_copies_and_hashes_research_files(tmp_path, monkeypatch
         root=tmp_path,
     )
 
+    assert report["schema_version"] == 2
     assert report["git_head"] == "abc123"
     assert report["production_model_changed_during_session"] is False
+    assert report["market_session"] is None
     assert report["known_data_gaps"][0]["reason"] == "connectivity_outage"
     files = {item["source"]: item for item in report["files"]}
     assert files["data/gexy/live_predictions.jsonl"]["lines"] == 1
@@ -63,6 +65,52 @@ def _assert_actual_outage_gap(report):
     assert gap["start"] == "2026-08-14T18:00:53.674568+00:00"
     assert gap["end"] == "2026-08-14T18:50:33.942241+00:00"
     assert abs(gap["duration_seconds"] - 2980.267673) < 1e-6
+
+
+def test_snapshot_persists_consistent_authoritative_market_session(tmp_path, monkeypatch):
+    monkeypatch.setattr(MODULE, "_git_head", lambda: None)
+    logs_dir = _empty_research_files(tmp_path)
+    payload = {
+        "observed_at": "2026-08-14T14:00:00+00:00",
+        "status": "ok",
+        "market_session_date": "2026-08-14",
+        "market_session_open_at": "2026-08-14T09:30:00-04:00",
+        "market_session_close_at": "2026-08-14T16:00:00-04:00",
+    }
+    (logs_dir / "session-2026-08-14.log").write_text(
+        json.dumps(payload) + "\n" + json.dumps({**payload, "observed_at": "2026-08-14T14:01:00+00:00"}) + "\n",
+        encoding="utf-8",
+    )
+
+    report = MODULE.snapshot_session(session_date="2026-08-14", root=tmp_path)
+
+    assert report["market_session"] == {
+        "session_date": "2026-08-14",
+        "open_at": "2026-08-14T09:30:00-04:00",
+        "close_at": "2026-08-14T16:00:00-04:00",
+        "source": "alpaca_calendar_collector",
+    }
+
+
+def test_snapshot_refuses_conflicting_market_session_windows(tmp_path, monkeypatch):
+    monkeypatch.setattr(MODULE, "_git_head", lambda: None)
+    logs_dir = _empty_research_files(tmp_path)
+    base = {
+        "observed_at": "2026-08-14T14:00:00+00:00",
+        "status": "ok",
+        "market_session_date": "2026-08-14",
+        "market_session_open_at": "2026-08-14T09:30:00-04:00",
+    }
+    first = {**base, "market_session_close_at": "2026-08-14T16:00:00-04:00"}
+    second = {**base, "observed_at": "2026-08-14T14:01:00+00:00", "market_session_close_at": "2026-08-14T13:00:00-04:00"}
+    (logs_dir / "session-2026-08-14.log").write_text(
+        json.dumps(first) + "\n" + json.dumps(second) + "\n",
+        encoding="utf-8",
+    )
+
+    report = MODULE.snapshot_session(session_date="2026-08-14", root=tmp_path)
+
+    assert report["market_session"] is None
 
 
 def test_snapshot_auto_detects_large_observation_gap_from_multiline_json(tmp_path, monkeypatch):
