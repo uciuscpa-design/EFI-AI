@@ -14,8 +14,9 @@ def _entry(
     predicted: str,
     realized: str,
     resolved: bool = True,
+    created_at: datetime | None = None,
 ) -> PredictionJournalEntry:
-    created = BASE_TIME + timedelta(seconds=index)
+    created = created_at or (BASE_TIME + timedelta(seconds=index))
     realized_move = 1.0 if realized == "up" else -1.0 if realized == "down" else 0.0
     prediction = LivePrediction(
         direction=predicted,
@@ -53,9 +54,12 @@ def test_one_session_never_qualifies_even_with_perfect_accuracy():
 
     metric = report.horizons[0]
     assert metric.total == 200
+    assert metric.scoreable_total == 200
+    assert metric.non_scoreable_after_close == 0
     assert metric.resolved == 200
     assert metric.unresolved == 0
     assert metric.resolution_coverage == 1.0
+    assert metric.coverage_basis == "all_forecasts_conservative"
     assert metric.directional_accuracy == 1.0
     assert metric.lift_vs_baseline == 0.5
     assert metric.qualified is False
@@ -103,7 +107,6 @@ def test_low_resolution_coverage_rejects_otherwise_strong_horizon():
     for session_index, session_date in enumerate(("2026-08-10", "2026-08-11", "2026-08-12")):
         rows = []
         offset = session_index * 1000
-        # 100 perfectly resolved balanced observations plus 100 missed due windows.
         rows.extend(_perfect_balanced_session(horizon=18, count=100, offset=offset))
         for index in range(100):
             direction = "up" if index % 2 == 0 else "down"
@@ -121,6 +124,7 @@ def test_low_resolution_coverage_rejects_otherwise_strong_horizon():
     metric = qualify_horizons(sessions).horizons[0]
 
     assert metric.total == 600
+    assert metric.scoreable_total == 600
     assert metric.resolved == 300
     assert metric.unresolved == 300
     assert metric.resolution_coverage == 0.5
@@ -129,6 +133,79 @@ def test_low_resolution_coverage_rejects_otherwise_strong_horizon():
     assert metric.lift_vs_baseline == 0.5
     assert metric.qualified is False
     assert "insufficient_resolution_coverage" in metric.reasons
+
+
+def test_authoritative_close_excludes_forecasts_that_cannot_mature():
+    session_date = "2026-08-10"
+    close_at = datetime(2026, 8, 10, 20, 0, tzinfo=timezone.utc)
+    rows = []
+    for index in range(100):
+        direction = "up" if index % 2 == 0 else "down"
+        rows.append(
+            _entry(
+                index,
+                horizon=60,
+                predicted=direction,
+                realized=direction,
+                resolved=True,
+                created_at=datetime(2026, 8, 10, 18, 30, tzinfo=timezone.utc) + timedelta(seconds=index),
+            )
+        )
+    for index in range(100):
+        direction = "up" if index % 2 == 0 else "down"
+        rows.append(
+            _entry(
+                1000 + index,
+                horizon=60,
+                predicted=direction,
+                realized=direction,
+                resolved=False,
+                created_at=datetime(2026, 8, 10, 19, 30, tzinfo=timezone.utc) + timedelta(seconds=index),
+            )
+        )
+
+    conservative = qualify_horizons({session_date: rows}).horizons[0]
+    authoritative = qualify_horizons(
+        {session_date: rows},
+        session_close_by_date={session_date: close_at},
+    ).horizons[0]
+
+    assert conservative.coverage_basis == "all_forecasts_conservative"
+    assert conservative.scoreable_total == 200
+    assert conservative.resolution_coverage == 0.5
+    assert authoritative.coverage_basis == "scoreable_before_authoritative_close"
+    assert authoritative.total == 200
+    assert authoritative.scoreable_total == 100
+    assert authoritative.non_scoreable_after_close == 100
+    assert authoritative.resolved == 100
+    assert authoritative.unresolved == 0
+    assert authoritative.resolution_coverage == 1.0
+
+
+def test_mixed_sessions_report_mixed_coverage_basis():
+    sessions = {
+        "2026-08-10": _perfect_balanced_session(horizon=5, count=20, offset=0),
+        "2026-08-11": _perfect_balanced_session(horizon=5, count=20, offset=100),
+    }
+    closes = {
+        "2026-08-11": datetime(2026, 8, 11, 20, 0, tzinfo=timezone.utc),
+    }
+
+    metric = qualify_horizons(sessions, session_close_by_date=closes).horizons[0]
+
+    assert metric.coverage_basis == "mixed_authoritative_close_and_conservative"
+
+
+def test_naive_authoritative_close_is_rejected():
+    try:
+        qualify_horizons(
+            {"2026-08-10": _perfect_balanced_session(horizon=5, count=20)},
+            session_close_by_date={"2026-08-10": datetime(2026, 8, 10, 16, 0)},
+        )
+    except ValueError as exc:
+        assert "timezone-aware" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
 
 
 def test_sufficient_cross_session_accuracy_lift_coverage_and_evidence_can_qualify():
@@ -142,6 +219,7 @@ def test_sufficient_cross_session_accuracy_lift_coverage_and_evidence_can_qualif
     metric = report.horizons[0]
 
     assert metric.total == 600
+    assert metric.scoreable_total == 600
     assert metric.resolved == 600
     assert metric.resolution_coverage == 1.0
     assert metric.directional_accuracy == 1.0
