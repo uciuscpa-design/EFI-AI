@@ -61,9 +61,6 @@ def _read_log_text(path: Path) -> str:
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
-        # Windows PowerShell 5.1 commonly emits UTF-16LE even when a BOM is
-        # absent after append/redirect combinations. A high NUL ratio is a
-        # reliable signal for ASCII-heavy JSON/lifecycle logs in UTF-16LE.
         if raw and raw.count(b"\x00") / len(raw) > 0.20:
             return raw.decode("utf-16-le", errors="replace")
         return raw.decode("utf-8", errors="replace")
@@ -87,6 +84,26 @@ def _json_objects_from_text(text: str) -> Iterator[dict[str, object]]:
             yield payload
 
 
+def _collector_payloads_from_log(path: Path) -> list[dict[str, object]]:
+    if not path.exists():
+        return []
+    text = _read_log_text(path)
+    payloads: list[dict[str, object]] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip().lstrip("\ufeff")
+        if not line.startswith("{"):
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            payloads.append(payload)
+    if not payloads:
+        payloads.extend(_json_objects_from_text(text))
+    return payloads
+
+
 def _timestamp_from_payload(payload: dict[str, object]) -> datetime | None:
     value = payload.get("observed_at")
     if not isinstance(value, str):
@@ -100,32 +117,48 @@ def _timestamp_from_payload(payload: dict[str, object]) -> datetime | None:
 
 def _observed_times_from_log(path: Path) -> list[datetime]:
     """Read collector-cycle timestamps from the actual mixed log format."""
-    if not path.exists():
-        return []
-
-    text = _read_log_text(path)
     observed: list[datetime] = []
-    for raw_line in text.splitlines():
-        line = raw_line.strip().lstrip("\ufeff")
-        if not line.startswith("{"):
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(payload, dict):
-            continue
+    for payload in _collector_payloads_from_log(path):
         timestamp = _timestamp_from_payload(payload)
         if timestamp is not None:
             observed.append(timestamp)
-
-    if not observed:
-        for payload in _json_objects_from_text(text):
-            timestamp = _timestamp_from_payload(payload)
-            if timestamp is not None:
-                observed.append(timestamp)
-
     return sorted(set(observed))
+
+
+def _market_session_from_log(path: Path, *, session_date: str) -> dict[str, object] | None:
+    """Extract one internally consistent authoritative Alpaca session window.
+
+    Older logs legitimately contain no market-session fields; those snapshots keep
+    a null window and downstream coverage calculations must remain conservative.
+    Conflicting windows are also rejected rather than silently choosing one.
+    """
+    windows: set[tuple[str, str, str]] = set()
+    for payload in _collector_payloads_from_log(path):
+        day = payload.get("market_session_date")
+        open_at = payload.get("market_session_open_at")
+        close_at = payload.get("market_session_close_at")
+        if not all(isinstance(value, str) and value for value in (day, open_at, close_at)):
+            continue
+        if day != session_date:
+            continue
+        try:
+            open_dt = datetime.fromisoformat(open_at.replace("Z", "+00:00"))
+            close_dt = datetime.fromisoformat(close_at.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if open_dt.tzinfo is None or close_dt.tzinfo is None or close_dt < open_dt:
+            continue
+        windows.add((day, open_dt.isoformat(), close_dt.isoformat()))
+
+    if len(windows) != 1:
+        return None
+    day, open_at, close_at = next(iter(windows))
+    return {
+        "session_date": day,
+        "open_at": open_at,
+        "close_at": close_at,
+        "source": "alpaca_calendar_collector",
+    }
 
 
 def _detect_observation_gaps(path: Path, *, threshold_seconds: int = 180) -> list[dict[str, object]]:
@@ -267,11 +300,12 @@ def snapshot_session(
         gaps.append({"start": gap_start, "end": gap_end, "reason": "connectivity_outage"})
 
     metadata: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "session_date": session_date,
         "git_head": _git_head(),
         "files": files,
         "known_data_gaps": gaps,
+        "market_session": _market_session_from_log(log_path, session_date=session_date),
         "note": note,
         "research_only": True,
         "production_model_changed_during_session": False,
