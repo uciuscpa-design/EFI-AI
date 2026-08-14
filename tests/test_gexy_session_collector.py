@@ -60,3 +60,27 @@ def test_run_cycle_stops_if_resolver_fails(monkeypatch):
     assert payload["status"] == "error"
     assert payload["stage"] == "resolve_due"
     assert [name for name, _ in calls] == ["gexy_resolve_due.py"]
+
+
+def test_run_loop_waits_before_open_then_collects_and_stops_after_close(monkeypatch):
+    payloads = iter([
+        {"status": "skipped", "reason": "outside_alpaca_market_session"},
+        {"status": "ok"},
+        {"status": "ok"},
+        {"status": "skipped", "reason": "outside_alpaca_market_session"},
+    ])
+    sleeps = []
+    monkeypatch.setattr(MODULE, "run_cycle", lambda **_: next(payloads))
+    monkeypatch.setattr(MODULE.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    exit_code = MODULE.run_loop(interval_seconds=60, tolerance_seconds=90)
+
+    assert exit_code == 0
+    assert sleeps == [60, 60, 60]
+
+
+def test_run_loop_stops_immediately_on_error(monkeypatch):
+    monkeypatch.setattr(MODULE, "run_cycle", lambda **_: {"status": "error", "stage": "resolve_due"})
+    monkeypatch.setattr(MODULE.time, "sleep", lambda _: (_ for _ in ()).throw(AssertionError("should not sleep")))
+
+    assert MODULE.run_loop(interval_seconds=60, tolerance_seconds=90) == 2
