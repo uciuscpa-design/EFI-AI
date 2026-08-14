@@ -80,9 +80,10 @@ class AlpacaOptionsClient:
         strike_price_lte: float | None = None,
         contract_type: str | None = None,
         root_symbol: str | None = None,
+        page_token: str | None = None,
         limit: int = 1000,
     ) -> dict[str, Any]:
-        """Return option contract metadata, including OI and contract multiplier."""
+        """Return one page of option contract metadata, including OI and multiplier."""
         symbol = self._symbol(underlying_symbol)
         if not 1 <= limit <= 10_000:
             raise ValueError("limit must be between 1 and 10000")
@@ -101,11 +102,70 @@ class AlpacaOptionsClient:
             "strike_price_lte": strike_price_lte,
             "type": contract_type,
             "root_symbol": root_symbol,
+            "page_token": page_token,
         }
         params.update({key: value for key, value in optional.items() if value is not None})
 
         url = f"{self.settings.alpaca_trading_base_url.rstrip('/')}/v2/options/contracts"
         return self._get_json(url, params=params)
+
+    def fetch_all_option_contracts(
+        self,
+        underlying_symbol: str,
+        *,
+        expiration_date: str | None = None,
+        expiration_date_gte: str | None = None,
+        expiration_date_lte: str | None = None,
+        strike_price_gte: float | None = None,
+        strike_price_lte: float | None = None,
+        contract_type: str | None = None,
+        root_symbol: str | None = None,
+        page_limit: int = 10_000,
+        max_pages: int = 100,
+    ) -> dict[str, Any]:
+        """Retrieve every contract page while guarding against pagination loops."""
+        if max_pages < 1:
+            raise ValueError("max_pages must be at least 1")
+
+        merged: list[Any] = []
+        page_token: str | None = None
+        seen_tokens: set[str] = set()
+
+        for _ in range(max_pages):
+            payload = self.fetch_option_contracts(
+                underlying_symbol,
+                expiration_date=expiration_date,
+                expiration_date_gte=expiration_date_gte,
+                expiration_date_lte=expiration_date_lte,
+                strike_price_gte=strike_price_gte,
+                strike_price_lte=strike_price_lte,
+                contract_type=contract_type,
+                root_symbol=root_symbol,
+                page_token=page_token,
+                limit=page_limit,
+            )
+            contracts = payload.get("option_contracts")
+            if contracts is None:
+                contracts = payload.get("contracts")
+            if isinstance(contracts, list):
+                merged.extend(contracts)
+
+            next_token_value = payload.get("next_page_token")
+            if next_token_value in (None, ""):
+                return {"option_contracts": merged, "next_page_token": None}
+
+            next_token = str(next_token_value)
+            if next_token in seen_tokens:
+                raise AlpacaOptionsError(
+                    "Alpaca repeated an option-contract pagination token; refusing to loop forever."
+                )
+            seen_tokens.add(next_token)
+            page_token = next_token
+
+        raise AlpacaOptionsError(
+            f"Option-contract pagination exceeded max_pages={max_pages}; "
+            "narrow the request or raise the explicit safety limit."
+        )
 
     def fetch_option_snapshots(
         self,
@@ -169,8 +229,9 @@ class AlpacaOptionsClient:
         expiration_date_gte: str | None = None,
         expiration_date_lte: str | None = None,
         root_symbol: str | None = None,
+        page_token: str | None = None,
     ) -> dict[str, Any]:
-        """Return Alpaca's latest option snapshots for an underlying symbol."""
+        """Return one Alpaca option-chain snapshot page for an underlying symbol."""
         symbol = self._symbol(underlying_symbol)
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
@@ -189,6 +250,7 @@ class AlpacaOptionsClient:
             "expiration_date_gte": expiration_date_gte,
             "expiration_date_lte": expiration_date_lte,
             "root_symbol": root_symbol,
+            "page_token": page_token,
         }
         params.update({key: value for key, value in optional.items() if value is not None})
 
