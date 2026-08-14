@@ -130,6 +130,32 @@ class AlpacaOptionsClient:
             },
         )
 
+    def fetch_option_snapshots_batched(
+        self,
+        symbols: Iterable[str],
+        *,
+        feed: str | None = None,
+        batch_size: int = 100,
+    ) -> dict[str, Any]:
+        """Fetch any number of explicit option snapshots in API-safe batches."""
+        normalized = [self._symbol(symbol) for symbol in symbols]
+        if not normalized:
+            raise ValueError("symbols must contain at least one contract")
+        if not 1 <= batch_size <= 100:
+            raise ValueError("batch_size must be between 1 and 100")
+
+        selected_feed = self._feed(feed)
+        merged: dict[str, Any] = {}
+        for start in range(0, len(normalized), batch_size):
+            payload = self.fetch_option_snapshots(
+                normalized[start : start + batch_size],
+                feed=selected_feed,
+            )
+            snapshots = payload.get("snapshots")
+            if isinstance(snapshots, dict):
+                merged.update(snapshots)
+        return {"snapshots": merged}
+
     def fetch_option_chain(
         self,
         underlying_symbol: str,
