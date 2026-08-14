@@ -47,6 +47,24 @@ def _empty_research_files(tmp_path):
     return logs_dir
 
 
+def _actual_compact_log_text():
+    return """{\"observed_at\": \"2026-08-14T17:59:30.000000+00:00\", \"status\": \"ok\", \"prediction\": {\"nested\": true}}
+{\"observed_at\": \"2026-08-14T18:00:53.674568+00:00\", \"status\": \"ok\", \"resolution\": {\"observed_at\": \"2026-08-14T18:00:55.743464+00:00\"}}
+[2026-08-14T11:48:40.0262366-07:00] GEXY session collector starting
+{\"observed_at\": \"2026-08-14T18:50:33.942241+00:00\", \"status\": \"ok\", \"prediction\": {\"nested\": true}}
+{\"observed_at\": \"2026-08-14T18:51:40.000000+00:00\", \"status\": \"ok\"}
+"""
+
+
+def _assert_actual_outage_gap(report):
+    assert len(report["known_data_gaps"]) == 1
+    gap = report["known_data_gaps"][0]
+    assert gap["reason"] == "observation_gap_detected"
+    assert gap["start"] == "2026-08-14T18:00:53.674568+00:00"
+    assert gap["end"] == "2026-08-14T18:50:33.942241+00:00"
+    assert abs(gap["duration_seconds"] - 2980.267673) < 1e-6
+
+
 def test_snapshot_auto_detects_large_observation_gap_from_multiline_json(tmp_path, monkeypatch):
     monkeypatch.setattr(MODULE, "_git_head", lambda: None)
     logs_dir = _empty_research_files(tmp_path)
@@ -83,24 +101,21 @@ noise between payloads
 def test_snapshot_detects_actual_line_delimited_outage_gap(tmp_path, monkeypatch):
     monkeypatch.setattr(MODULE, "_git_head", lambda: None)
     logs_dir = _empty_research_files(tmp_path)
-    (logs_dir / "session-2026-08-14.log").write_text(
-        """{\"observed_at\": \"2026-08-14T17:59:30.000000+00:00\", \"status\": \"ok\", \"prediction\": {\"nested\": true}}
-{\"observed_at\": \"2026-08-14T18:00:53.674568+00:00\", \"status\": \"ok\", \"resolution\": {\"observed_at\": \"2026-08-14T18:00:55.743464+00:00\"}}
-[2026-08-14T11:48:40.0262366-07:00] GEXY session collector starting
-{\"observed_at\": \"2026-08-14T18:50:33.942241+00:00\", \"status\": \"ok\", \"prediction\": {\"nested\": true}}
-{\"observed_at\": \"2026-08-14T18:51:40.000000+00:00\", \"status\": \"ok\"}
-""",
-        encoding="utf-8",
-    )
+    (logs_dir / "session-2026-08-14.log").write_text(_actual_compact_log_text(), encoding="utf-8")
 
     report = MODULE.snapshot_session(session_date="2026-08-14", root=tmp_path)
 
-    assert len(report["known_data_gaps"]) == 1
-    gap = report["known_data_gaps"][0]
-    assert gap["reason"] == "observation_gap_detected"
-    assert gap["start"] == "2026-08-14T18:00:53.674568+00:00"
-    assert gap["end"] == "2026-08-14T18:50:33.942241+00:00"
-    assert abs(gap["duration_seconds"] - 2980.267673) < 1e-6
+    _assert_actual_outage_gap(report)
+
+
+def test_snapshot_detects_actual_utf16_powershell_outage_gap(tmp_path, monkeypatch):
+    monkeypatch.setattr(MODULE, "_git_head", lambda: None)
+    logs_dir = _empty_research_files(tmp_path)
+    (logs_dir / "session-2026-08-14.log").write_text(_actual_compact_log_text(), encoding="utf-16")
+
+    report = MODULE.snapshot_session(session_date="2026-08-14", root=tmp_path)
+
+    _assert_actual_outage_gap(report)
 
 
 def test_snapshot_detects_gap_between_collector_exit_and_restart(tmp_path, monkeypatch):
