@@ -7,9 +7,9 @@ from dataclasses import asdict
 from pathlib import Path
 from urllib.error import HTTPError
 
+from packages.gexy.alpaca_calendar import is_alpaca_market_session
 from packages.gexy.alpaca_live import predict_from_alpaca
 from packages.gexy.gax_shadow_journal import append_gax_shadow, make_gax_shadow_record
-from packages.gexy.market_session import is_regular_spx_cash_session
 from packages.gexy.prediction_journal import append_entry, make_entry
 
 
@@ -45,7 +45,7 @@ def main() -> int:
     parser.add_argument(
         "--journal-outside-regular-session",
         action="store_true",
-        help="explicitly allow journaling outside the regular 09:30-16:00 ET cash session",
+        help="explicitly allow journaling outside Alpaca's regular market session",
     )
     args = parser.parse_args()
 
@@ -61,6 +61,7 @@ def main() -> int:
 
     try:
         result = predict_from_alpaca(horizon_minutes=args.horizon)
+        regular_session = is_alpaca_market_session(result.timestamp)
     except HTTPError as exc:
         payload = {
             "status": "error",
@@ -77,7 +78,6 @@ def main() -> int:
         return 2
 
     forecasts = result.pipeline.multi_horizon.predictions
-    regular_session = is_regular_spx_cash_session(result.timestamp)
     journaling_allowed = (
         not args.no_journal
         and (regular_session or args.journal_outside_regular_session)
@@ -125,7 +125,7 @@ def main() -> int:
         "journal_skip_reason": (
             None
             if journaling_allowed
-            else "disabled_by_flag" if args.no_journal else "outside_regular_spx_cash_session"
+            else "disabled_by_flag" if args.no_journal else "outside_alpaca_market_session"
         ),
         "journal_path": journal_path,
         "gax_shadow_journal_path": gax_shadow_path,
