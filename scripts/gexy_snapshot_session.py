@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from datetime import date, datetime
 from pathlib import Path
+from typing import Iterator
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCES = (
@@ -45,18 +46,35 @@ def _git_head() -> str | None:
     return value if completed.returncode == 0 and value else None
 
 
+def _json_objects_from_text(text: str) -> Iterator[dict[str, object]]:
+    """Yield complete JSON objects embedded in mixed/plain-text collector logs.
+
+    Collector subprocesses print indented JSON, so a line-by-line parser misses
+    observation timestamps. Scan for object starts and let JSONDecoder consume the
+    complete object, while safely skipping non-JSON braces from incidental text.
+    """
+    decoder = json.JSONDecoder()
+    cursor = 0
+    while True:
+        start = text.find("{", cursor)
+        if start < 0:
+            return
+        try:
+            payload, consumed = decoder.raw_decode(text[start:])
+        except json.JSONDecodeError:
+            cursor = start + 1
+            continue
+        cursor = start + consumed
+        if isinstance(payload, dict):
+            yield payload
+
+
 def _observed_times_from_log(path: Path) -> list[datetime]:
     observed: list[datetime] = []
     if not path.exists():
         return observed
-    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw_line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    text = path.read_text(encoding="utf-8", errors="replace")
+    for payload in _json_objects_from_text(text):
         value = payload.get("observed_at")
         if not isinstance(value, str):
             continue
