@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time as clock_time
 from zoneinfo import ZoneInfo
 
 from .alpaca_provider import AlpacaHttpClient, PAPER_BASE
@@ -22,7 +22,7 @@ class AlpacaMarketSession:
         return self.open_at <= local <= self.close_at
 
 
-def _session_clock(value: object, *, default: str) -> datetime.time:
+def _session_clock(value: object, *, default: str) -> clock_time:
     text = str(value if value not in (None, "") else default)
     return datetime.strptime(text[-5:], "%H:%M").time()
 
