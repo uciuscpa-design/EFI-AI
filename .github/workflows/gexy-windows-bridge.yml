@@ -23,6 +23,7 @@ on:
           - live-predict
           - resolve-due
           - collect-once
+          - collect-session
           - journal-report
           - shadow-report
 
@@ -30,7 +31,7 @@ jobs:
   gexy:
     if: github.actor == 'uciuscpa-design' && github.repository == 'uciuscpa-design/EFI-AI'
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 10
+    timeout-minutes: 600
     permissions:
       contents: read
     defaults:
@@ -46,7 +47,7 @@ jobs:
             $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
             $command = "$content".Trim()
           }
-          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','journal-report','shadow-report')
+          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','collect-session','journal-report','shadow-report')
           if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
           "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         env:
@@ -102,7 +103,7 @@ jobs:
             exit 0
           }
 
-          if ($command -in @('preflight','capture-once','live-predict','resolve-due','collect-once')) {
+          if ($command -in @('preflight','capture-once','live-predict','resolve-due','collect-once','collect-session')) {
             git pull --ff-only origin feature/gexy
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $envFile = Join-Path $repo '.env'
@@ -149,5 +150,10 @@ jobs:
 
           if ($command -eq 'collect-once') {
             python scripts\gexy_session_collector.py --once --tolerance-seconds 90
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'collect-session') {
+            python scripts\gexy_session_collector.py --interval-seconds 60 --tolerance-seconds 90
             exit $LASTEXITCODE
           }
