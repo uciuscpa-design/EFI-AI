@@ -1,1 +1,1 @@
-tests  
+refresh-session-snapshot
