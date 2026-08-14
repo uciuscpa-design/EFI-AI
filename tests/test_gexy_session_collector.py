@@ -20,6 +20,20 @@ def test_run_cycle_skips_outside_session(monkeypatch):
     assert calls == []
 
 
+def test_run_cycle_reports_calendar_connectivity_error(monkeypatch):
+    def fail_calendar(_):
+        raise OSError("network unavailable")
+
+    monkeypatch.setattr(MODULE, "is_alpaca_market_session", fail_calendar)
+
+    payload = MODULE.run_cycle()
+
+    assert payload["status"] == "error"
+    assert payload["stage"] == "market_session"
+    assert payload["reason"] == "calendar_unavailable"
+    assert payload["error_type"] == "OSError"
+
+
 def test_run_cycle_resolves_before_predicting(monkeypatch):
     calls = []
     monkeypatch.setattr(MODULE, "is_alpaca_market_session", lambda _: True)
@@ -79,8 +93,17 @@ def test_run_loop_waits_before_open_then_collects_and_stops_after_close(monkeypa
     assert sleeps == [60, 60, 60]
 
 
-def test_run_loop_stops_immediately_on_error(monkeypatch):
-    monkeypatch.setattr(MODULE, "run_cycle", lambda **_: {"status": "error", "stage": "resolve_due"})
-    monkeypatch.setattr(MODULE.time, "sleep", lambda _: (_ for _ in ()).throw(AssertionError("should not sleep")))
+def test_run_loop_retries_transient_error_then_recovers(monkeypatch):
+    payloads = iter([
+        {"status": "error", "stage": "market_session"},
+        {"status": "ok"},
+        {"status": "skipped", "reason": "outside_alpaca_market_session"},
+    ])
+    sleeps = []
+    monkeypatch.setattr(MODULE, "run_cycle", lambda **_: next(payloads))
+    monkeypatch.setattr(MODULE.time, "sleep", lambda seconds: sleeps.append(seconds))
 
-    assert MODULE.run_loop(interval_seconds=60, tolerance_seconds=90) == 2
+    exit_code = MODULE.run_loop(interval_seconds=60, tolerance_seconds=90)
+
+    assert exit_code == 0
+    assert sleeps == [60, 60]
