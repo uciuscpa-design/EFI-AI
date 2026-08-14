@@ -15,6 +15,8 @@ DEFAULT_REQUIRED_HORIZONS = (5, 15, 30, 60)
 DEFAULT_MIN_DISAGREEMENTS = 50
 DEFAULT_MIN_GAX_WIN_RATE_ON_DISAGREEMENT = 0.55
 DEFAULT_SHADOW_THRESHOLDS = (0.0, 0.5, 1.0, 2.0)
+DEFAULT_MIN_TRUSTED_HORIZON_RESOLVED = 100
+DEFAULT_MIN_TRUSTED_HORIZON_SUCCESS_RATE = 0.70
 
 
 def _direction_from_move(move: float) -> str:
@@ -23,6 +25,64 @@ def _direction_from_move(move: float) -> str:
     if move < -1e-9:
         return "down"
     return "flat"
+
+
+def select_shortest_trusted_horizon(
+    by_horizon: dict[str, dict[str, object]],
+    *,
+    min_resolved: int = DEFAULT_MIN_TRUSTED_HORIZON_RESOLVED,
+    min_success_rate: float = DEFAULT_MIN_TRUSTED_HORIZON_SUCCESS_RATE,
+    success_rate_field: str = "bias_alignment_accuracy",
+) -> dict[str, object]:
+    """Advisory-only selection of the shortest horizon that clears evidence gates."""
+    if min_resolved <= 0:
+        raise ValueError("min_resolved must be positive")
+    if not 0.0 <= min_success_rate <= 1.0:
+        raise ValueError("min_success_rate must be between 0 and 1")
+
+    evaluated: dict[str, dict[str, object]] = {}
+    passing: list[tuple[int, int, float]] = []
+    for horizon_text, metrics in by_horizon.items():
+        try:
+            horizon = int(horizon_text)
+        except (TypeError, ValueError):
+            continue
+        if horizon <= 0 or not isinstance(metrics, dict):
+            continue
+        resolved = int(metrics.get("resolved", 0))
+        success_rate = float(metrics.get(success_rate_field, 0.0))
+        clears_gate = resolved >= min_resolved and success_rate >= min_success_rate
+        evaluated[str(horizon)] = {
+            "resolved": resolved,
+            "success_rate": success_rate,
+            "clears_gate": clears_gate,
+        }
+        if clears_gate:
+            passing.append((horizon, resolved, success_rate))
+
+    if not passing:
+        return {
+            "recommended": False,
+            "reason": "no_horizon_clears_trust_gate",
+            "min_resolved": min_resolved,
+            "min_success_rate": min_success_rate,
+            "success_rate_field": success_rate_field,
+            "evaluated": dict(sorted(evaluated.items(), key=lambda item: int(item[0]))),
+        }
+
+    horizon, resolved, success_rate = min(passing, key=lambda item: item[0])
+    return {
+        "recommended": True,
+        "reason": "shortest_horizon_clears_trust_gate",
+        "horizon_minutes": horizon,
+        "resolved": resolved,
+        "success_rate": success_rate,
+        "min_resolved": min_resolved,
+        "min_success_rate": min_success_rate,
+        "success_rate_field": success_rate_field,
+        "evaluated": dict(sorted(evaluated.items(), key=lambda item: int(item[0]))),
+        "automatic_promotion": False,
+    }
 
 
 def _incremental_value(entries, shadows) -> dict[str, object]:
@@ -198,4 +258,5 @@ def build_gax_shadow_report(
         "shadow_candidate_threshold_sweep_by_horizon": _shadow_candidate_sweep_by_horizon(entries, shadows),
     }
     report["promotion_recommendation"] = _promotion_recommendation(report)
+    report["shortest_trusted_horizon"] = select_shortest_trusted_horizon(by_horizon)
     return report
