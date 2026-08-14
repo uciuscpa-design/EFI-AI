@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 import httpx
@@ -8,11 +9,11 @@ from packages.core.config import Settings, get_settings
 
 
 class AlpacaOptionsError(RuntimeError):
-    """Raised when Alpaca option market data cannot be retrieved."""
+    """Raised when Alpaca option data cannot be retrieved."""
 
 
 class AlpacaOptionsClient:
-    """Small authenticated boundary around Alpaca's option snapshot API."""
+    """Authenticated boundary around Alpaca option metadata and market-data APIs."""
 
     def __init__(
         self,
@@ -50,10 +51,84 @@ class AlpacaOptionsClient:
             "APCA-API-SECRET-KEY": self.settings.alpaca_api_secret_key,
         }
 
+    def _feed(self, feed: str | None) -> str:
+        selected_feed = (feed or self.settings.alpaca_options_feed).strip().lower()
+        if selected_feed not in {"indicative", "opra"}:
+            raise ValueError("feed must be 'indicative' or 'opra'")
+        return selected_feed
+
+    @staticmethod
+    def _symbol(value: str) -> str:
+        symbol = value.strip().upper()
+        if not symbol:
+            raise ValueError("symbol must not be empty")
+        return symbol
+
     def check_authentication(self) -> dict[str, Any]:
         """Call a lightweight options metadata endpoint to validate auth headers."""
         url = f"{self.settings.alpaca_data_base_url.rstrip('/')}/v1beta1/options/meta/exchanges"
         return self._get_json(url)
+
+    def fetch_option_contracts(
+        self,
+        underlying_symbol: str,
+        *,
+        expiration_date: str | None = None,
+        expiration_date_gte: str | None = None,
+        expiration_date_lte: str | None = None,
+        strike_price_gte: float | None = None,
+        strike_price_lte: float | None = None,
+        contract_type: str | None = None,
+        root_symbol: str | None = None,
+        limit: int = 1000,
+    ) -> dict[str, Any]:
+        """Return option contract metadata, including OI and contract multiplier."""
+        symbol = self._symbol(underlying_symbol)
+        if not 1 <= limit <= 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        if contract_type is not None and contract_type not in {"call", "put"}:
+            raise ValueError("contract_type must be 'call' or 'put'")
+
+        params: dict[str, str | int | float] = {
+            "underlying_symbols": symbol,
+            "limit": limit,
+        }
+        optional: dict[str, str | float | None] = {
+            "expiration_date": expiration_date,
+            "expiration_date_gte": expiration_date_gte,
+            "expiration_date_lte": expiration_date_lte,
+            "strike_price_gte": strike_price_gte,
+            "strike_price_lte": strike_price_lte,
+            "type": contract_type,
+            "root_symbol": root_symbol,
+        }
+        params.update({key: value for key, value in optional.items() if value is not None})
+
+        url = f"{self.settings.alpaca_trading_base_url.rstrip('/')}/v2/options/contracts"
+        return self._get_json(url, params=params)
+
+    def fetch_option_snapshots(
+        self,
+        symbols: str | Iterable[str],
+        *,
+        feed: str | None = None,
+    ) -> dict[str, Any]:
+        """Return market snapshots for one to 100 explicit option contract symbols."""
+        if isinstance(symbols, str):
+            normalized = [self._symbol(symbols)]
+        else:
+            normalized = [self._symbol(symbol) for symbol in symbols]
+        if not 1 <= len(normalized) <= 100:
+            raise ValueError("symbols must contain between 1 and 100 contracts")
+
+        url = f"{self.settings.alpaca_data_base_url.rstrip('/')}/v1beta1/options/snapshots"
+        return self._get_json(
+            url,
+            params={
+                "symbols": ",".join(normalized),
+                "feed": self._feed(feed),
+            },
+        )
 
     def fetch_option_chain(
         self,
@@ -61,32 +136,47 @@ class AlpacaOptionsClient:
         *,
         limit: int = 100,
         feed: str | None = None,
+        contract_type: str | None = None,
+        strike_price_gte: float | None = None,
+        strike_price_lte: float | None = None,
+        expiration_date: str | None = None,
+        expiration_date_gte: str | None = None,
+        expiration_date_lte: str | None = None,
+        root_symbol: str | None = None,
     ) -> dict[str, Any]:
         """Return Alpaca's latest option snapshots for an underlying symbol."""
-        symbol = underlying_symbol.strip().upper()
-        if not symbol:
-            raise ValueError("underlying_symbol must not be empty")
+        symbol = self._symbol(underlying_symbol)
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
+        if contract_type is not None and contract_type not in {"call", "put"}:
+            raise ValueError("contract_type must be 'call' or 'put'")
 
-        selected_feed = (feed or self.settings.alpaca_options_feed).strip().lower()
-        if selected_feed not in {"indicative", "opra"}:
-            raise ValueError("feed must be 'indicative' or 'opra'")
+        params: dict[str, str | int | float] = {
+            "feed": self._feed(feed),
+            "limit": limit,
+        }
+        optional: dict[str, str | float | None] = {
+            "type": contract_type,
+            "strike_price_gte": strike_price_gte,
+            "strike_price_lte": strike_price_lte,
+            "expiration_date": expiration_date,
+            "expiration_date_gte": expiration_date_gte,
+            "expiration_date_lte": expiration_date_lte,
+            "root_symbol": root_symbol,
+        }
+        params.update({key: value for key, value in optional.items() if value is not None})
 
         url = (
             f"{self.settings.alpaca_data_base_url.rstrip('/')}"
             f"/v1beta1/options/snapshots/{symbol}"
         )
-        return self._get_json(
-            url,
-            params={"feed": selected_feed, "limit": limit},
-        )
+        return self._get_json(url, params=params)
 
     def _get_json(
         self,
         url: str,
         *,
-        params: dict[str, str | int] | None = None,
+        params: dict[str, str | int | float] | None = None,
     ) -> dict[str, Any]:
         try:
             response = self._client.get(url, headers=self._headers(), params=params)
@@ -101,8 +191,8 @@ class AlpacaOptionsClient:
             )
         if response.status_code == 403:
             raise AlpacaOptionsError(
-                "Alpaca returned HTTP 403: credentials were recognized but this data "
-                "resource/feed is not permitted for the account."
+                "Alpaca returned HTTP 403: credentials were recognized but this "
+                "resource or data feed is not permitted for the account."
             )
 
         try:
