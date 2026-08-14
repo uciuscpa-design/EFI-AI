@@ -42,6 +42,14 @@ def _resolve_source(source: Literal["auto", "production", "shadow"], horizon: in
     return "shadow", SHADOW_JOURNAL
 
 
+def _journal_label(path: Path) -> str:
+    """Return a stable display label without requiring test files to live under ROOT."""
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        return path.name
+
+
 def _entry_payload(entry: PredictionJournalEntry) -> dict[str, Any]:
     prediction = entry.prediction
     return {
@@ -116,7 +124,7 @@ def live_history(
     selected = rows[-limit:]
     return {
         "source": resolved_source,
-        "journal": str(path.relative_to(ROOT)),
+        "journal": _journal_label(path),
         "horizon_minutes": horizon,
         "count": len(selected),
         "total_matching": len(rows),
@@ -135,7 +143,7 @@ def live_latest(
         raise HTTPException(status_code=404, detail=f"no {horizon}m GEXY predictions available")
     return {
         "source": resolved_source,
-        "journal": str(path.relative_to(ROOT)),
+        "journal": _journal_label(path),
         "data": _entry_payload(rows[-1]),
     }
 
