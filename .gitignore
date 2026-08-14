@@ -11,3 +11,10 @@ __pycache__/
 
 
 efi_ai.db
+
+# GEXY runtime research data (local, append-only / generated)
+data/gexy/live_predictions.jsonl
+data/gexy/shadow_predictions.jsonl
+data/gexy/gax_shadow.jsonl
+data/gexy/logs/
+projects/gexy/snapshots/
