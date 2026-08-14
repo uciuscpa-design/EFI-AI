@@ -5,9 +5,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from packages.gexy.alpaca_calendar import is_alpaca_market_session
 from packages.gexy.alpaca_live import AlpacaSpxSnapshotProvider, build_alpaca_market_snapshot
 from packages.gexy.due_resolution import due_now
-from packages.gexy.market_session import is_regular_spx_cash_session
 from packages.gexy.prediction_journal import load_entries, resolve_entry, rewrite_entries
 
 
@@ -18,8 +18,8 @@ def main() -> int:
     args = parser.parse_args()
 
     observed_at = datetime.now(timezone.utc)
-    if not is_regular_spx_cash_session(observed_at):
-        print(json.dumps({"status": "skipped", "reason": "outside_regular_spx_session", "observed_at": observed_at.isoformat()}, indent=2, sort_keys=True))
+    if not is_alpaca_market_session(observed_at):
+        print(json.dumps({"status": "skipped", "reason": "outside_alpaca_market_session", "observed_at": observed_at.isoformat()}, indent=2, sort_keys=True))
         return 0
 
     path = Path(args.journal)
