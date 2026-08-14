@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Iterable, Mapping
 
 from .horizon_metrics import DEFAULT_WILSON_Z, wilson_lower_bound
@@ -20,9 +21,12 @@ class HorizonQualification:
     horizon_minutes: int
     sessions: int
     total: int
+    scoreable_total: int
+    non_scoreable_after_close: int
     resolved: int
     unresolved: int
     resolution_coverage: float
+    coverage_basis: str
     directional_accuracy: float
     wilson_lower_bound: float
     baseline_accuracy: float
@@ -72,9 +76,43 @@ def _baseline_accuracy(entries: Iterable[PredictionJournalEntry]) -> float:
     return max(counts.values()) / len(rows)
 
 
+def _validated_session_closes(session_close_by_date: Mapping[str, datetime] | None) -> dict[str, datetime]:
+    closes: dict[str, datetime] = {}
+    for session_date, close_at in (session_close_by_date or {}).items():
+        if close_at.tzinfo is None:
+            raise ValueError("session close timestamps must be timezone-aware")
+        closes[str(session_date)] = close_at
+    return closes
+
+
+def _is_scoreable_before_close(
+    session_date: str,
+    entry: PredictionJournalEntry,
+    closes: Mapping[str, datetime],
+) -> bool:
+    close_at = closes.get(session_date)
+    if close_at is None:
+        # Conservative fallback for legacy snapshots: every forecast stays in the
+        # coverage denominator because we cannot prove it was impossible to score.
+        return True
+    due_at = entry.created_at + timedelta(minutes=entry.prediction.horizon_minutes)
+    return due_at <= close_at
+
+
+def _coverage_basis(session_dates: Iterable[str], closes: Mapping[str, datetime]) -> str:
+    dates = set(session_dates)
+    with_close = {session_date for session_date in dates if session_date in closes}
+    if dates and with_close == dates:
+        return "scoreable_before_authoritative_close"
+    if with_close:
+        return "mixed_authoritative_close_and_conservative"
+    return "all_forecasts_conservative"
+
+
 def qualify_horizons(
     session_entries: Mapping[str, Iterable[PredictionJournalEntry]],
     *,
+    session_close_by_date: Mapping[str, datetime] | None = None,
     target_directional_accuracy: float = DEFAULT_TARGET_DIRECTIONAL_ACCURACY,
     minimum_resolved: int = DEFAULT_MIN_RESOLVED,
     minimum_sessions: int = DEFAULT_MIN_SESSIONS,
@@ -85,13 +123,12 @@ def qualify_horizons(
 ) -> QualificationReport:
     """Evaluate fine horizons conservatively across independent session snapshots.
 
-    Qualification is deliberately difficult. A horizon needs enough independent
-    sessions and resolved observations, high resolution coverage, a Wilson lower
-    bound at the target accuracy, lift over the best constant-direction baseline,
-    and stable positive lift across sessions. The coverage gate prevents a small,
-    selectively resolved subset from looking artificially strong when the resolver
-    missed many forecasts. This remains shadow-only: automatic promotion is always
-    disabled.
+    When a frozen snapshot carries an authoritative Alpaca close, forecasts whose
+    due time falls after that close are excluded from the *coverage denominator*
+    because they could not mature during the regular session. Legacy snapshots
+    without a recorded close remain conservative: every forecast counts as
+    scoreable. Accuracy and lift are always calculated only on resolved, scoreable
+    observations. Automatic promotion remains disabled.
     """
     if not 0.0 < target_directional_accuracy <= 1.0:
         raise ValueError("target_directional_accuracy must be in (0, 1]")
@@ -106,6 +143,7 @@ def qualify_horizons(
     if not 0.0 <= minimum_resolution_coverage <= 1.0:
         raise ValueError("minimum_resolution_coverage must be in [0, 1]")
 
+    closes = _validated_session_closes(session_close_by_date)
     normalized: dict[str, list[PredictionJournalEntry]] = {}
     for session_date, entries in session_entries.items():
         rows = list(entries)
@@ -120,12 +158,20 @@ def qualify_horizons(
     metrics: list[HorizonQualification] = []
     for horizon in sorted(grouped):
         tagged_rows = grouped[horizon]
-        total_rows = [entry for _, entry in tagged_rows]
-        resolved_rows = [entry for entry in total_rows if entry.resolved]
-        total = len(total_rows)
+        scoreable_tagged = [
+            (session_date, entry)
+            for session_date, entry in tagged_rows
+            if _is_scoreable_before_close(session_date, entry, closes)
+        ]
+        total = len(tagged_rows)
+        scoreable_total = len(scoreable_tagged)
+        non_scoreable_after_close = total - scoreable_total
+        resolved_rows = [entry for _, entry in scoreable_tagged if entry.resolved]
         resolved = len(resolved_rows)
-        unresolved = total - resolved
-        resolution_coverage = resolved / total if total else 0.0
+        unresolved = scoreable_total - resolved
+        resolution_coverage = resolved / scoreable_total if scoreable_total else 0.0
+        session_dates_for_horizon = {session_date for session_date, _ in tagged_rows}
+        coverage_basis = _coverage_basis(session_dates_for_horizon, closes)
 
         hits = sum(1 for entry in resolved_rows if bool(entry.directional_hit))
         accuracy = hits / resolved if resolved else 0.0
@@ -134,10 +180,11 @@ def qualify_horizons(
         lift = accuracy - baseline
 
         by_session: dict[str, list[PredictionJournalEntry]] = defaultdict(list)
-        for session_date, entry in tagged_rows:
+        for session_date, entry in scoreable_tagged:
             by_session[session_date].append(entry)
         positive_lift_sessions = 0
-        for session_rows in by_session.values():
+        for session_date in session_dates_for_horizon:
+            session_rows = by_session.get(session_date, [])
             resolved_session_rows = [entry for entry in session_rows if entry.resolved]
             if not resolved_session_rows:
                 continue
@@ -147,7 +194,7 @@ def qualify_horizons(
             )
             if session_accuracy - _baseline_accuracy(resolved_session_rows) > 0.0:
                 positive_lift_sessions += 1
-        sessions = len(by_session)
+        sessions = len(session_dates_for_horizon)
         positive_fraction = positive_lift_sessions / sessions if sessions else 0.0
 
         reasons: list[str] = []
@@ -169,9 +216,12 @@ def qualify_horizons(
                 horizon_minutes=horizon,
                 sessions=sessions,
                 total=total,
+                scoreable_total=scoreable_total,
+                non_scoreable_after_close=non_scoreable_after_close,
                 resolved=resolved,
                 unresolved=unresolved,
                 resolution_coverage=resolution_coverage,
+                coverage_basis=coverage_basis,
                 directional_accuracy=accuracy,
                 wilson_lower_bound=lower_bound,
                 baseline_accuracy=baseline,
