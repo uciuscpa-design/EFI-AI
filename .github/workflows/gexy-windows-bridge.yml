@@ -22,6 +22,7 @@ on:
           - capture-once
           - live-predict
           - resolve-due
+          - collect-once
           - journal-report
           - shadow-report
 
@@ -45,7 +46,7 @@ jobs:
             $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
             $command = "$content".Trim()
           }
-          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','journal-report','shadow-report')
+          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','journal-report','shadow-report')
           if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
           "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         env:
@@ -101,7 +102,7 @@ jobs:
             exit 0
           }
 
-          if ($command -in @('preflight','capture-once','live-predict','resolve-due')) {
+          if ($command -in @('preflight','capture-once','live-predict','resolve-due','collect-once')) {
             git pull --ff-only origin feature/gexy
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $envFile = Join-Path $repo '.env'
@@ -143,5 +144,10 @@ jobs:
 
           if ($command -eq 'resolve-due') {
             python scripts\gexy_resolve_due.py --tolerance-seconds 90
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'collect-once') {
+            python scripts\gexy_session_collector.py --once --tolerance-seconds 90
             exit $LASTEXITCODE
           }
