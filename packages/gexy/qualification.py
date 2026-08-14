@@ -12,13 +12,17 @@ DEFAULT_MIN_RESOLVED = 100
 DEFAULT_MIN_SESSIONS = 3
 DEFAULT_MIN_LIFT_VS_BASELINE = 0.05
 DEFAULT_MIN_POSITIVE_LIFT_SESSION_FRACTION = 2.0 / 3.0
+DEFAULT_MIN_RESOLUTION_COVERAGE = 0.90
 
 
 @dataclass(frozen=True)
 class HorizonQualification:
     horizon_minutes: int
     sessions: int
+    total: int
     resolved: int
+    unresolved: int
+    resolution_coverage: float
     directional_accuracy: float
     wilson_lower_bound: float
     baseline_accuracy: float
@@ -30,6 +34,7 @@ class HorizonQualification:
     minimum_sessions: int
     minimum_lift_vs_baseline: float
     minimum_positive_lift_session_fraction: float
+    minimum_resolution_coverage: float
     qualified: bool
     reasons: tuple[str, ...]
 
@@ -75,15 +80,18 @@ def qualify_horizons(
     minimum_sessions: int = DEFAULT_MIN_SESSIONS,
     minimum_lift_vs_baseline: float = DEFAULT_MIN_LIFT_VS_BASELINE,
     minimum_positive_lift_session_fraction: float = DEFAULT_MIN_POSITIVE_LIFT_SESSION_FRACTION,
+    minimum_resolution_coverage: float = DEFAULT_MIN_RESOLUTION_COVERAGE,
     wilson_z: float = DEFAULT_WILSON_Z,
 ) -> QualificationReport:
     """Evaluate fine horizons conservatively across independent session snapshots.
 
-    A horizon can qualify only if it has enough independent sessions, enough
-    resolved observations, a Wilson lower bound at the target accuracy, positive
-    lift over the best constant-direction baseline, and positive lift in a
-    sufficient fraction of sessions. This remains shadow-only: automatic
-    promotion is always disabled.
+    Qualification is deliberately difficult. A horizon needs enough independent
+    sessions and resolved observations, high resolution coverage, a Wilson lower
+    bound at the target accuracy, lift over the best constant-direction baseline,
+    and stable positive lift across sessions. The coverage gate prevents a small,
+    selectively resolved subset from looking artificially strong when the resolver
+    missed many forecasts. This remains shadow-only: automatic promotion is always
+    disabled.
     """
     if not 0.0 < target_directional_accuracy <= 1.0:
         raise ValueError("target_directional_accuracy must be in (0, 1]")
@@ -95,10 +103,12 @@ def qualify_horizons(
         raise ValueError("minimum_lift_vs_baseline must be non-negative")
     if not 0.0 <= minimum_positive_lift_session_fraction <= 1.0:
         raise ValueError("minimum_positive_lift_session_fraction must be in [0, 1]")
+    if not 0.0 <= minimum_resolution_coverage <= 1.0:
+        raise ValueError("minimum_resolution_coverage must be in [0, 1]")
 
     normalized: dict[str, list[PredictionJournalEntry]] = {}
     for session_date, entries in session_entries.items():
-        rows = [entry for entry in entries if entry.resolved]
+        rows = list(entries)
         if rows:
             normalized[str(session_date)] = rows
 
@@ -110,12 +120,17 @@ def qualify_horizons(
     metrics: list[HorizonQualification] = []
     for horizon in sorted(grouped):
         tagged_rows = grouped[horizon]
-        rows = [entry for _, entry in tagged_rows]
-        resolved = len(rows)
-        hits = sum(1 for entry in rows if bool(entry.directional_hit))
-        accuracy = hits / resolved
-        lower_bound = wilson_lower_bound(hits, resolved, z=wilson_z)
-        baseline = _baseline_accuracy(rows)
+        total_rows = [entry for _, entry in tagged_rows]
+        resolved_rows = [entry for entry in total_rows if entry.resolved]
+        total = len(total_rows)
+        resolved = len(resolved_rows)
+        unresolved = total - resolved
+        resolution_coverage = resolved / total if total else 0.0
+
+        hits = sum(1 for entry in resolved_rows if bool(entry.directional_hit))
+        accuracy = hits / resolved if resolved else 0.0
+        lower_bound = wilson_lower_bound(hits, resolved, z=wilson_z) if resolved else 0.0
+        baseline = _baseline_accuracy(resolved_rows)
         lift = accuracy - baseline
 
         by_session: dict[str, list[PredictionJournalEntry]] = defaultdict(list)
@@ -123,8 +138,14 @@ def qualify_horizons(
             by_session[session_date].append(entry)
         positive_lift_sessions = 0
         for session_rows in by_session.values():
-            session_accuracy = sum(1 for entry in session_rows if bool(entry.directional_hit)) / len(session_rows)
-            if session_accuracy - _baseline_accuracy(session_rows) > 0.0:
+            resolved_session_rows = [entry for entry in session_rows if entry.resolved]
+            if not resolved_session_rows:
+                continue
+            session_accuracy = (
+                sum(1 for entry in resolved_session_rows if bool(entry.directional_hit))
+                / len(resolved_session_rows)
+            )
+            if session_accuracy - _baseline_accuracy(resolved_session_rows) > 0.0:
                 positive_lift_sessions += 1
         sessions = len(by_session)
         positive_fraction = positive_lift_sessions / sessions if sessions else 0.0
@@ -134,6 +155,8 @@ def qualify_horizons(
             reasons.append("insufficient_sessions")
         if resolved < minimum_resolved:
             reasons.append("insufficient_resolved")
+        if resolution_coverage < minimum_resolution_coverage:
+            reasons.append("insufficient_resolution_coverage")
         if lower_bound < target_directional_accuracy:
             reasons.append("wilson_below_target")
         if lift < minimum_lift_vs_baseline:
@@ -145,7 +168,10 @@ def qualify_horizons(
             HorizonQualification(
                 horizon_minutes=horizon,
                 sessions=sessions,
+                total=total,
                 resolved=resolved,
+                unresolved=unresolved,
+                resolution_coverage=resolution_coverage,
                 directional_accuracy=accuracy,
                 wilson_lower_bound=lower_bound,
                 baseline_accuracy=baseline,
@@ -157,6 +183,7 @@ def qualify_horizons(
                 minimum_sessions=minimum_sessions,
                 minimum_lift_vs_baseline=minimum_lift_vs_baseline,
                 minimum_positive_lift_session_fraction=minimum_positive_lift_session_fraction,
+                minimum_resolution_coverage=minimum_resolution_coverage,
                 qualified=not reasons,
                 reasons=tuple(reasons),
             )
