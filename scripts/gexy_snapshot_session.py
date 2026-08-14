@@ -29,6 +29,10 @@ def _line_count(path: Path) -> int:
         return sum(1 for _ in handle)
 
 
+def _relative_posix(path: Path, root: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
 def _git_head() -> str | None:
     completed = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -107,15 +111,15 @@ def snapshot_session(
     for source in source_paths:
         if not source.exists():
             files.append({
-                "source": str(source.relative_to(root)),
+                "source": _relative_posix(source, root),
                 "present": False,
             })
             continue
         target = destination / source.name
         shutil.copy2(source, target)
         files.append({
-            "source": str(source.relative_to(root)),
-            "snapshot": str(target.relative_to(root)),
+            "source": _relative_posix(source, root),
+            "snapshot": _relative_posix(target, root),
             "present": True,
             "bytes": target.stat().st_size,
             "lines": _line_count(target),
@@ -140,7 +144,7 @@ def snapshot_session(
     }
     metadata_path = destination / "metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    metadata["metadata_path"] = str(metadata_path.relative_to(root))
+    metadata["metadata_path"] = _relative_posix(metadata_path, root)
     return metadata
 
 
