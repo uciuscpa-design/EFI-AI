@@ -18,7 +18,7 @@ $info = Get-ScheduledTaskInfo -TaskName $taskName
 [pscustomobject]@{
     task_name = $task.TaskName
     state = $task.State.ToString()
-    next_run_time = $info.NextRunTime
-    last_run_time = $info.LastRunTime
+    next_run_time = if ($info.NextRunTime) { $info.NextRunTime.ToString('o') } else { $null }
+    last_run_time = if ($info.LastRunTime.Year -gt 2000) { $info.LastRunTime.ToString('o') } else { $null }
     launcher = $launcher
 } | ConvertTo-Json
