@@ -105,13 +105,13 @@ def main() -> int:
     try:
         with AlpacaOptionsClient() as client:
             client.check_authentication()
-            contracts_payload = client.fetch_option_contracts(
+            contracts_payload = client.fetch_all_option_contracts(
                 args.symbol,
                 expiration_date=expiration.isoformat(),
                 strike_price_gte=strike_min,
                 strike_price_lte=strike_max,
                 root_symbol=args.root_symbol,
-                limit=10_000,
+                page_limit=10_000,
             )
             contracts = _contracts(contracts_payload)
             symbols = [str(item.get("symbol") or "").strip() for item in contracts]
@@ -179,13 +179,6 @@ def main() -> int:
             f"signed={_money(level.heuristic_signed_gex_per_1pct):>12}  "
             f"GAX/pt={_money(level.gax_notional_per_point):>12}  "
             f"contracts={level.contracts}"
-        )
-
-    if contracts_payload.get("next_page_token"):
-        print(
-            "Warning: Alpaca reported more contract metadata pages; narrow the strike range "
-            "or add contract pagination before treating this as a complete surface.",
-            file=sys.stderr,
         )
 
     return 0
