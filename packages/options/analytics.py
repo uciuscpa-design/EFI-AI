@@ -15,7 +15,7 @@ class GammaSource(StrEnum):
 class DerivedOptionAnalytics:
     symbol: str
     mark: float
-    implied_volatility: float
+    implied_volatility: float | None
     gamma: float
     gamma_source: GammaSource
 
@@ -32,7 +32,7 @@ def derive_option_analytics(
     """Return a usable IV/gamma pair without hiding market-data assumptions.
 
     Priority:
-    1. Use feed gamma when present. A feed IV is preserved when available.
+    1. Use feed gamma when present; preserve feed IV when present.
     2. If only feed IV is present, calculate gamma from that IV.
     3. If neither is present, solve IV from the option mark and calculate gamma.
 
@@ -56,27 +56,10 @@ def derive_option_analytics(
     if feed_gamma is not None:
         if feed_gamma < 0:
             raise ValueError("feed gamma cannot be negative")
-        if feed_iv is None or feed_iv <= 0:
-            solved_iv = implied_volatility(
-                market_price=mark,
-                spot=spot,
-                strike=contract.strike_price,
-                years_to_expiry=years_to_expiry,
-                option_type=contract.option_type,
-                risk_free_rate=risk_free_rate,
-                dividend_yield=dividend_yield,
-            )
-            return DerivedOptionAnalytics(
-                symbol=contract.symbol,
-                mark=mark,
-                implied_volatility=solved_iv,
-                gamma=feed_gamma,
-                gamma_source=GammaSource.FEED_GAMMA,
-            )
         return DerivedOptionAnalytics(
             symbol=contract.symbol,
             mark=mark,
-            implied_volatility=feed_iv,
+            implied_volatility=feed_iv if feed_iv is not None and feed_iv > 0 else None,
             gamma=feed_gamma,
             gamma_source=GammaSource.FEED_GAMMA,
         )
