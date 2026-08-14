@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     max_position_notional: float = 10_000.0
     max_daily_loss: float = 1_000.0
 
-    # Alpaca market-data credentials. Keep compatibility with Alpaca's
-    # conventional APCA_* environment variable names while also allowing
-    # EFI-prefixed names for project-level configuration.
+    # Alpaca credentials and endpoints. Keep compatibility with Alpaca's
+    # conventional APCA_* environment names while also allowing EFI-prefixed
+    # project configuration.
     alpaca_api_key_id: str = Field(
         default="",
         validation_alias=AliasChoices(
@@ -42,6 +42,14 @@ class Settings(BaseSettings):
             "APCA_DATA_BASE_URL",
             "ALPACA_DATA_BASE_URL",
             "EFI_ALPACA_DATA_BASE_URL",
+        ),
+    )
+    alpaca_trading_base_url: str = Field(
+        default="https://paper-api.alpaca.markets",
+        validation_alias=AliasChoices(
+            "APCA_API_BASE_URL",
+            "ALPACA_TRADING_BASE_URL",
+            "EFI_ALPACA_TRADING_BASE_URL",
         ),
     )
     alpaca_options_feed: str = Field(
