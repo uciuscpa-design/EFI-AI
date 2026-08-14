@@ -3,24 +3,52 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 
 from packages.gexy.prediction_journal import load_entries
 from packages.gexy.qualification import QualificationReport, qualify_horizons
 
 
-def _load_snapshot_sessions(root: Path) -> dict[str, list]:
+def _load_snapshot_research(root: Path) -> tuple[dict[str, list], dict[str, datetime]]:
     sessions: dict[str, list] = {}
+    closes: dict[str, datetime] = {}
     if not root.exists():
-        return sessions
+        return sessions, closes
+
     for directory in sorted(path for path in root.iterdir() if path.is_dir()):
+        session_date = directory.name
         journal = directory / "shadow_predictions.jsonl"
         if not journal.exists():
             continue
         rows = load_entries(journal)
-        if rows:
-            sessions[directory.name] = rows
-    return sessions
+        if not rows:
+            continue
+        sessions[session_date] = rows
+
+        metadata_path = directory / "metadata.json"
+        if not metadata_path.exists():
+            continue
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        market_session = metadata.get("market_session")
+        if not isinstance(market_session, dict):
+            continue
+        if market_session.get("session_date") != session_date:
+            continue
+        close_text = market_session.get("close_at")
+        if not isinstance(close_text, str):
+            continue
+        try:
+            close_at = datetime.fromisoformat(close_text.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if close_at.tzinfo is not None:
+            closes[session_date] = close_at
+
+    return sessions, closes
 
 
 def _metric_identity(metric) -> dict[str, object]:
@@ -31,7 +59,10 @@ def _metric_identity(metric) -> dict[str, object]:
         "baseline_accuracy": metric.baseline_accuracy,
         "lift_vs_baseline": metric.lift_vs_baseline,
         "resolution_coverage": metric.resolution_coverage,
+        "coverage_basis": metric.coverage_basis,
         "resolved": metric.resolved,
+        "scoreable_total": metric.scoreable_total,
+        "non_scoreable_after_close": metric.non_scoreable_after_close,
         "total": metric.total,
     }
 
@@ -50,6 +81,7 @@ def _evidence_summary(report: QualificationReport) -> dict[str, object]:
             "coverage_passing_horizons_minutes": [],
             "coverage_failing_horizons_minutes": [],
             "positive_lift_horizons_minutes": [],
+            "coverage_bases": [],
             "best_observed_accuracy": None,
             "best_observed_lift": None,
             "best_observed_wilson_lower_bound": None,
@@ -62,6 +94,7 @@ def _evidence_summary(report: QualificationReport) -> dict[str, object]:
             row.horizon_minutes for row in rows if row.horizon_minutes not in coverage_passing
         ],
         "positive_lift_horizons_minutes": positive_lift,
+        "coverage_bases": sorted({row.coverage_basis for row in rows}),
         "best_observed_accuracy": _metric_identity(max(rows, key=lambda row: row.directional_accuracy)),
         "best_observed_lift": _metric_identity(max(rows, key=lambda row: row.lift_vs_baseline)),
         "best_observed_wilson_lower_bound": _metric_identity(max(rows, key=lambda row: row.wilson_lower_bound)),
@@ -81,9 +114,10 @@ def main() -> int:
     parser.add_argument("--minimum-resolution-coverage", type=float, default=0.90)
     args = parser.parse_args()
 
-    sessions = _load_snapshot_sessions(Path(args.snapshots_root))
+    sessions, session_closes = _load_snapshot_research(Path(args.snapshots_root))
     report = qualify_horizons(
         sessions,
+        session_close_by_date=session_closes,
         target_directional_accuracy=args.target_accuracy,
         minimum_resolved=args.minimum_resolved,
         minimum_sessions=args.minimum_sessions,
@@ -97,6 +131,7 @@ def main() -> int:
         "automatic_promotion": report.automatic_promotion,
         "sessions": list(report.session_dates),
         "session_count": len(report.session_dates),
+        "authoritative_close_sessions": sorted(session_closes),
         "qualified_horizons_minutes": list(report.qualified_horizons_minutes),
         "shortest_qualified_horizon_minutes": report.shortest_qualified_horizon_minutes,
         "gates": {
