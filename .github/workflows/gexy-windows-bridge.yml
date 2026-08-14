@@ -25,6 +25,7 @@ on:
           - collect-once
           - collect-session
           - install-session-task
+          - session-task-status
           - journal-report
           - shadow-report
 
@@ -48,7 +49,7 @@ jobs:
             $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
             $command = "$content".Trim()
           }
-          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','collect-session','install-session-task','journal-report','shadow-report')
+          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','collect-session','install-session-task','session-task-status','journal-report','shadow-report')
           if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
           "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         env:
@@ -95,6 +96,24 @@ jobs:
           if ($command -eq 'install-session-task') {
             powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gexy_install_session_task.ps1
             exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'session-task-status') {
+            $taskName = 'GEXY Session Collector'
+            $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+            $info = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction Stop
+            $logDir = Join-Path $repo 'data\gexy\logs'
+            $latestLog = Get-ChildItem $logDir -Filter 'session-*.log' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            [pscustomobject]@{
+              task_name = $task.TaskName
+              state = $task.State.ToString()
+              next_run_time = if ($info.NextRunTime.Year -gt 2000) { $info.NextRunTime.ToString('o') } else { $null }
+              last_run_time = if ($info.LastRunTime.Year -gt 2000) { $info.LastRunTime.ToString('o') } else { $null }
+              last_task_result = $info.LastTaskResult
+              latest_log = if ($latestLog) { $latestLog.FullName } else { $null }
+              latest_log_write_time = if ($latestLog) { $latestLog.LastWriteTime.ToString('o') } else { $null }
+            } | ConvertTo-Json
+            exit 0
           }
 
           if ($command -eq 'env-meta') {
