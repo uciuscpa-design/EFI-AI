@@ -17,7 +17,47 @@ class Settings(BaseSettings):
     max_position_notional: float = 10_000.0
     max_daily_loss: float = 1_000.0
 
+    # Alpaca market-data credentials. Keep compatibility with Alpaca's
+    # conventional APCA_* environment variable names while also allowing
+    # EFI-prefixed names for project-level configuration.
+    alpaca_api_key_id: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "APCA_API_KEY_ID",
+            "ALPACA_API_KEY_ID",
+            "EFI_ALPACA_API_KEY_ID",
+        ),
+    )
+    alpaca_api_secret_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "APCA_API_SECRET_KEY",
+            "ALPACA_API_SECRET_KEY",
+            "EFI_ALPACA_API_SECRET_KEY",
+        ),
+    )
+    alpaca_data_base_url: str = Field(
+        default="https://data.alpaca.markets",
+        validation_alias=AliasChoices(
+            "APCA_DATA_BASE_URL",
+            "ALPACA_DATA_BASE_URL",
+            "EFI_ALPACA_DATA_BASE_URL",
+        ),
+    )
+    alpaca_options_feed: str = Field(
+        default="indicative",
+        validation_alias=AliasChoices(
+            "APCA_OPTIONS_FEED",
+            "ALPACA_OPTIONS_FEED",
+            "EFI_ALPACA_OPTIONS_FEED",
+        ),
+    )
+
     model_config = SettingsConfigDict(env_prefix="EFI_", env_file=".env", extra="ignore")
+
+    @property
+    def has_alpaca_credentials(self) -> bool:
+        return bool(self.alpaca_api_key_id and self.alpaca_api_secret_key)
 
     @model_validator(mode="after")
     def enforce_production_safety(self) -> "Settings":
