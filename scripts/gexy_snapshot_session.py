@@ -51,6 +51,24 @@ def _git_head() -> str | None:
     return value if completed.returncode == 0 and value else None
 
 
+def _read_log_text(path: Path) -> str:
+    """Decode collector logs written by Windows PowerShell or UTF-8 tools."""
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16", errors="replace")
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return raw.decode("utf-8-sig", errors="replace")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        # Windows PowerShell 5.1 commonly emits UTF-16LE even when a BOM is
+        # absent after append/redirect combinations. A high NUL ratio is a
+        # reliable signal for ASCII-heavy JSON/lifecycle logs in UTF-16LE.
+        if raw and raw.count(b"\x00") / len(raw) > 0.20:
+            return raw.decode("utf-16-le", errors="replace")
+        return raw.decode("utf-8", errors="replace")
+
+
 def _json_objects_from_text(text: str) -> Iterator[dict[str, object]]:
     """Yield complete JSON objects embedded in mixed/plain-text collector logs."""
     decoder = json.JSONDecoder()
@@ -81,20 +99,14 @@ def _timestamp_from_payload(payload: dict[str, object]) -> datetime | None:
 
 
 def _observed_times_from_log(path: Path) -> list[datetime]:
-    """Read collector-cycle timestamps from the actual mixed log format.
-
-    The live launcher writes one compact JSON object per collector cycle, mixed
-    with plain-text lifecycle lines. Prefer exact per-line JSON parsing so braces
-    inside nested payloads cannot confuse the generic scanner. Keep the scanner
-    only as a compatibility fallback for older multiline JSON logs.
-    """
+    """Read collector-cycle timestamps from the actual mixed log format."""
     if not path.exists():
         return []
 
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = _read_log_text(path)
     observed: list[datetime] = []
     for raw_line in text.splitlines():
-        line = raw_line.strip()
+        line = raw_line.strip().lstrip("\ufeff")
         if not line.startswith("{"):
             continue
         try:
@@ -137,7 +149,7 @@ def _detect_lifecycle_gaps(path: Path, *, threshold_seconds: int = 180) -> list[
     """Detect downtime between a recorded collector exit and its next restart."""
     if not path.exists():
         return []
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = _read_log_text(path)
     events: list[tuple[datetime, str, int | None]] = []
     for match in _LIFECYCLE_PATTERN.finditer(text):
         try:
