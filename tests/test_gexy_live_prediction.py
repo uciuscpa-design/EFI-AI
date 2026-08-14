@@ -1,4 +1,4 @@
-from packages.gexy.live_prediction import predict_live
+from packages.gexy.live_prediction import PRODUCTION_HORIZONS_MINUTES, predict_live, shadow_horizon_grid
 from packages.gexy.surface_features import GEXSurfaceFeatures
 
 
@@ -66,3 +66,13 @@ def test_horizon_must_be_positive() -> None:
         assert "horizon_minutes" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_shadow_horizon_grid_defaults_to_every_minute_from_1_to_60() -> None:
+    grid = shadow_horizon_grid()
+    assert grid == tuple(range(1, 61))
+    assert len(grid) == 60
+
+
+def test_production_horizons_remain_unchanged() -> None:
+    assert PRODUCTION_HORIZONS_MINUTES == (5, 15, 30, 60)
