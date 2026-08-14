@@ -31,6 +31,7 @@ on:
           - journal-report
           - shadow-report
           - shadow-diagnostics
+          - snapshot-session
 
 jobs:
   gexy:
@@ -52,7 +53,7 @@ jobs:
             $content = (Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } -Uri "https://api.github.com/repos/${{ github.repository }}/contents/.gexy-trigger/command.txt?ref=${{ github.sha }}")
             $command = "$content".Trim()
           }
-          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','collect-session','install-session-task','start-session-task','session-task-status','session-log-tail','journal-report','shadow-report','shadow-diagnostics')
+          $allowed = @('status','tests','preflight','env-meta','capture-once','live-predict','resolve-due','collect-once','collect-session','install-session-task','start-session-task','session-task-status','session-log-tail','journal-report','shadow-report','shadow-diagnostics','snapshot-session')
           if ($allowed -notcontains $command) { throw "Unsupported GEXY bridge command: $command" }
           "command=$command" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         env:
@@ -76,7 +77,7 @@ jobs:
             exit $LASTEXITCODE
           }
 
-          if ($command -in @('tests','journal-report','shadow-report','shadow-diagnostics','install-session-task','start-session-task')) {
+          if ($command -in @('tests','journal-report','shadow-report','shadow-diagnostics','snapshot-session','install-session-task','start-session-task')) {
             git pull --ff-only origin feature/gexy
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
@@ -98,6 +99,17 @@ jobs:
 
           if ($command -eq 'shadow-diagnostics') {
             python scripts\gexy_shadow_diagnostics.py
+            exit $LASTEXITCODE
+          }
+
+          if ($command -eq 'snapshot-session') {
+            $taskName = 'GEXY Session Collector'
+            $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+            if ($task.State.ToString() -eq 'Running') {
+              throw 'Refusing to snapshot while GEXY Session Collector is still running.'
+            }
+            $sessionDate = Get-Date -Format 'yyyy-MM-dd'
+            python scripts\gexy_snapshot_session.py --session-date $sessionDate --note 'End-of-session research snapshot; observation gaps auto-detected from collector log.'
             exit $LASTEXITCODE
           }
 
