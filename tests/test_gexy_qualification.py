@@ -7,7 +7,14 @@ from packages.gexy.qualification import qualify_horizons
 BASE_TIME = datetime(2026, 8, 10, 14, 0, tzinfo=timezone.utc)
 
 
-def _entry(index: int, *, horizon: int, predicted: str, realized: str) -> PredictionJournalEntry:
+def _entry(
+    index: int,
+    *,
+    horizon: int,
+    predicted: str,
+    realized: str,
+    resolved: bool = True,
+) -> PredictionJournalEntry:
     created = BASE_TIME + timedelta(seconds=index)
     realized_move = 1.0 if realized == "up" else -1.0 if realized == "down" else 0.0
     prediction = LivePrediction(
@@ -20,16 +27,16 @@ def _entry(index: int, *, horizon: int, predicted: str, realized: str) -> Predic
         regime="test",
     )
     return PredictionJournalEntry(
-        prediction_id=f"{index}-{horizon}-{predicted}-{realized}",
+        prediction_id=f"{index}-{horizon}-{predicted}-{realized}-{resolved}",
         created_at=created,
         spot=5000.0,
         prediction=prediction,
         model_version="test",
-        resolved_at=created + timedelta(minutes=horizon),
-        realized_spot=5000.0 + realized_move,
-        realized_move_points=realized_move,
-        directional_hit=predicted == realized,
-        absolute_error_points=0.0 if predicted == realized else 2.0,
+        resolved_at=created + timedelta(minutes=horizon) if resolved else None,
+        realized_spot=5000.0 + realized_move if resolved else None,
+        realized_move_points=realized_move if resolved else None,
+        directional_hit=(predicted == realized) if resolved else None,
+        absolute_error_points=(0.0 if predicted == realized else 2.0) if resolved else None,
     )
 
 
@@ -45,6 +52,10 @@ def test_one_session_never_qualifies_even_with_perfect_accuracy():
     report = qualify_horizons({"2026-08-10": _perfect_balanced_session(horizon=5, count=200)})
 
     metric = report.horizons[0]
+    assert metric.total == 200
+    assert metric.resolved == 200
+    assert metric.unresolved == 0
+    assert metric.resolution_coverage == 1.0
     assert metric.directional_accuracy == 1.0
     assert metric.lift_vs_baseline == 0.5
     assert metric.qualified is False
@@ -87,7 +98,40 @@ def test_positive_lift_with_too_few_resolved_does_not_qualify():
     assert "insufficient_resolved" in metric.reasons
 
 
-def test_sufficient_cross_session_accuracy_lift_and_evidence_can_qualify():
+def test_low_resolution_coverage_rejects_otherwise_strong_horizon():
+    sessions = {}
+    for session_index, session_date in enumerate(("2026-08-10", "2026-08-11", "2026-08-12")):
+        rows = []
+        offset = session_index * 1000
+        # 100 perfectly resolved balanced observations plus 100 missed due windows.
+        rows.extend(_perfect_balanced_session(horizon=18, count=100, offset=offset))
+        for index in range(100):
+            direction = "up" if index % 2 == 0 else "down"
+            rows.append(
+                _entry(
+                    offset + 500 + index,
+                    horizon=18,
+                    predicted=direction,
+                    realized=direction,
+                    resolved=False,
+                )
+            )
+        sessions[session_date] = rows
+
+    metric = qualify_horizons(sessions).horizons[0]
+
+    assert metric.total == 600
+    assert metric.resolved == 300
+    assert metric.unresolved == 300
+    assert metric.resolution_coverage == 0.5
+    assert metric.directional_accuracy == 1.0
+    assert metric.wilson_lower_bound >= 0.95
+    assert metric.lift_vs_baseline == 0.5
+    assert metric.qualified is False
+    assert "insufficient_resolution_coverage" in metric.reasons
+
+
+def test_sufficient_cross_session_accuracy_lift_coverage_and_evidence_can_qualify():
     sessions = {
         "2026-08-10": _perfect_balanced_session(horizon=20, count=200, offset=0),
         "2026-08-11": _perfect_balanced_session(horizon=20, count=200, offset=1000),
@@ -97,7 +141,9 @@ def test_sufficient_cross_session_accuracy_lift_and_evidence_can_qualify():
     report = qualify_horizons(sessions)
     metric = report.horizons[0]
 
+    assert metric.total == 600
     assert metric.resolved == 600
+    assert metric.resolution_coverage == 1.0
     assert metric.directional_accuracy == 1.0
     assert metric.wilson_lower_bound >= 0.95
     assert metric.lift_vs_baseline == 0.5
