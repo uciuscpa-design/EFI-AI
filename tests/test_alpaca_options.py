@@ -52,8 +52,8 @@ def test_option_contracts_fetches_oi_metadata_from_trading_api() -> None:
         assert request.url.path == "/v2/options/contracts"
         assert request.url.params["underlying_symbols"] == "SPX"
         assert request.url.params["expiration_date"] == "2026-08-14"
-        assert request.url.params["strike_price_gte"] == "7790.0"
-        assert request.url.params["strike_price_lte"] == "7810.0"
+        assert float(request.url.params["strike_price_gte"]) == 7790.0
+        assert float(request.url.params["strike_price_lte"]) == 7810.0
         assert request.url.params["limit"] == "50"
         return httpx.Response(
             200,
