@@ -14,10 +14,11 @@ from packages.gexy.databento_es import (
     market_observation_from_trade,
     validate_symbol_mapping,
 )
+from packages.gexy.market_sync import datetime_to_unix_ns
 
 
 def _ns(value: datetime) -> int:
-    return int(value.timestamp() * 1_000_000_000)
+    return datetime_to_unix_ns(value)
 
 
 def _event(*, raw_symbol: str = "ESU6", instrument_id: int = 12345) -> DatabentoTradeEvent:
@@ -59,6 +60,23 @@ def test_trade_event_preserves_event_and_provider_receive_timestamps_separately(
     assert event.provider_capture_latency_seconds == pytest.approx(0.002)
 
 
+def test_submicrosecond_vendor_timestamp_survives_datetime_projection():
+    event_at = datetime(2026, 8, 17, 13, 30, 0, 100000, tzinfo=timezone.utc)
+    base_ns = _ns(event_at)
+    event = DatabentoTradeEvent(
+        instrument_id=12345,
+        raw_symbol="ESU6",
+        price_nanos=7_787_250_000_000,
+        ts_event_ns=base_ns + 777,
+        ts_recv_ns=base_ns + 2_000_777,
+        publisher_id=1,
+    )
+
+    assert event.observed_at == event_at
+    assert event.ts_event_ns == base_ns + 777
+    assert event.provider_capture_latency_seconds == pytest.approx(0.002)
+
+
 def test_mapped_trade_becomes_provider_neutral_market_observation():
     event = _event()
     mapping = _mapping()
@@ -74,6 +92,7 @@ def test_mapped_trade_becomes_provider_neutral_market_observation():
     assert observation.instrument_type == "future"
     assert observation.price == 7787.25
     assert observation.observed_at == event.observed_at
+    assert observation.event_time_ns == event.ts_event_ns
     assert observation.received_at == gexy_received_at
     assert observation.source == "databento:GLBX.MDP3:publisher=1"
     assert observation.acquisition_latency_seconds == pytest.approx(0.005)
@@ -115,6 +134,8 @@ def test_event_provenance_record_contains_roll_identity_and_vendor_timestamps():
     assert record["instrument_id"] == 12345
     assert record["publisher_id"] == 1
     assert record["price"] == 7787.25
+    assert record["ts_event_ns"] == event.ts_event_ns
+    assert record["ts_recv_ns"] == event.ts_recv_ns
     assert record["ts_event"] == "2026-08-17T13:30:00.100000+00:00"
     assert record["ts_recv"] == "2026-08-17T13:30:00.102000+00:00"
 
@@ -136,3 +157,5 @@ def test_trade_event_rejects_invalid_identity_price_or_timestamps():
         DatabentoTradeEvent(**{**base, "price_nanos": 0})
     with pytest.raises(ValueError, match="ts_event_ns must be positive"):
         DatabentoTradeEvent(**{**base, "ts_event_ns": 0})
+    with pytest.raises(ValueError, match="ts_recv_ns must be >= ts_event_ns"):
+        DatabentoTradeEvent(**{**base, "ts_event_ns": 3, "ts_recv_ns": 2})
