@@ -24,6 +24,9 @@ JEFFREYS_BETA = 0.5
 MIN_CELL_ROWS = 20
 MIN_INDEPENDENT_SESSION_ROWS = 50
 REQUIRED_POSITIVE_INDEPENDENT_SESSIONS = 2
+FROZEN_SELECTION_MODEL_FINGERPRINT = (
+    "24b38617e061c18a864c3c871c863504e10a3c146eb81d3c7f4cded93b81cab0"
+)
 
 
 def _session_date(entry: PredictionJournalEntry) -> date:
@@ -208,9 +211,49 @@ def _evaluate(entries: Sequence[PredictionJournalEntry], model: dict[str, object
     }
 
 
+def _blocked_drift_report(
+    *,
+    model: dict[str, object],
+    selection_fit: dict[str, object],
+    expected_fingerprint: str,
+) -> dict[str, object]:
+    actual_fingerprint = str(model.get("fingerprint_sha256") or "")
+    return {
+        "status": "selection_model_drift",
+        "model": model,
+        "selection_fit_diagnostic": selection_fit,
+        "selection_model_fingerprint_expected": expected_fingerprint,
+        "selection_model_fingerprint_actual": actual_fingerprint,
+        "selection_model_fingerprint_match": False,
+        "independent_sessions": [],
+        "promotion_gate": {
+            "minimum_rows_per_informative_session": MIN_INDEPENDENT_SESSION_ROWS,
+            "required_positive_independent_sessions": REQUIRED_POSITIVE_INDEPENDENT_SESSIONS,
+            "informative_session_count": 0,
+            "positive_session_count": 0,
+            "aggregate": _evaluate([], model),
+            "aggregate_positive": False,
+            "met": False,
+            "blocked_reason": "selection_model_fingerprint_mismatch",
+        },
+        "meaning": "posterior_probability_correct estimates P(the current predicted direction is correct); it does not alter the predicted direction",
+        "selection_session_is_validation": False,
+        "production_confidence_replacement_authorized": False,
+        "production_direction_change_authorized": False,
+        "execution_authorized": False,
+        "next_action": "Investigate selection-data or fitting-code drift; do not score future sessions until the frozen v1 model is reconciled.",
+        "guardrails": [
+            "The frozen 2026-08-14 selection model fingerprint changed, so future evaluation is blocked rather than silently refit.",
+            "Do not update the expected fingerprint merely to make the check pass; any intentional refit requires a new versioned model.",
+            "This report cannot authorize production confidence replacement, direction changes, or execution.",
+        ],
+    }
+
+
 def build_confidence_calibration_v1_report(
     *,
     journal_path: str | Path = "data/gexy/shadow_predictions.jsonl",
+    expected_fingerprint: str | None = FROZEN_SELECTION_MODEL_FINGERPRINT,
 ) -> dict[str, object]:
     entries = load_entries(journal_path)
     model = fit_selection_model(entries)
@@ -220,6 +263,15 @@ def build_confidence_calibration_v1_report(
         if _eligible(entry) and _session_date(entry) == SELECTION_SESSION
     ]
     selection_fit = _evaluate(selection_entries, model)
+    actual_fingerprint = str(model.get("fingerprint_sha256") or "")
+    fingerprint_match = expected_fingerprint is None or actual_fingerprint == expected_fingerprint
+
+    if expected_fingerprint is not None and not fingerprint_match:
+        return _blocked_drift_report(
+            model=model,
+            selection_fit=selection_fit,
+            expected_fingerprint=expected_fingerprint,
+        )
 
     future_dates = sorted({
         _session_date(entry)
@@ -283,6 +335,9 @@ def build_confidence_calibration_v1_report(
         "status": status,
         "model": model,
         "selection_fit_diagnostic": selection_fit,
+        "selection_model_fingerprint_expected": expected_fingerprint,
+        "selection_model_fingerprint_actual": actual_fingerprint,
+        "selection_model_fingerprint_match": fingerprint_match,
         "independent_sessions": independent_sessions,
         "promotion_gate": {
             "minimum_rows_per_informative_session": MIN_INDEPENDENT_SESSION_ROWS,
@@ -301,6 +356,7 @@ def build_confidence_calibration_v1_report(
         "execution_authorized": False,
         "guardrails": [
             "The model is fit only on the 2026-08-14 selection session and negative-gamma production-horizon forecasts.",
+            "The recomputed selection model must match the frozen v1 fingerprint before any future session is scored.",
             "Unsupported regimes, horizons, directions, or undersized selection cells are unscored rather than assigned fabricated reliability.",
             "Probabilities below 0.5 are allowed because the quantity is forecast correctness probability, not a forced certainty score.",
             "Future evaluation uses Brier score on separately captured sessions; the selection fit is diagnostic only.",
