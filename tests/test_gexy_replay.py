@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import pytest
 
@@ -58,6 +60,14 @@ def test_horizon_labels_require_exact_future_clock_minute() -> None:
     assert pd.isna(result.loc[1, "forward_t_plus_1m"])
     assert result.loc[0, "forward_t_plus_3m"] == pytest.approx(7780.0)
     assert result.loc[0, "forward_move_3m_points"] == pytest.approx(4.0)
+
+
+def test_horizon_labels_do_not_emit_deprecation_warning() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        result = add_forward_horizon_labels(_frame(), [1, 5, 15])
+
+    assert result.loc[0, "forward_t_plus_1m"] == pytest.approx(7777.0)
 
 
 def test_horizon_labels_reject_nonpositive_horizon() -> None:
