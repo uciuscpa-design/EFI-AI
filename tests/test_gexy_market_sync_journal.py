@@ -1,6 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
-from packages.gexy.market_sync import MarketObservation, synchronize_primary_with_reference
+from packages.gexy.market_sync import (
+    MarketObservation,
+    datetime_to_unix_ns,
+    synchronize_primary_with_reference,
+)
 from packages.gexy.market_sync_journal import (
     append_sync_pair,
     build_sync_coverage_report,
@@ -67,6 +71,7 @@ def test_append_load_and_summarize_sync_coverage(tmp_path):
     assert summary.p95_reference_lag_seconds == 10.0
     assert summary.lookahead_violations == 0
     assert summary.provenance_flag_violations == 0
+    assert summary.timestamp_consistency_violations == 0
 
 
 def test_report_marks_manually_corrupted_future_reference_as_integrity_failure(tmp_path):
@@ -87,6 +92,44 @@ def test_report_marks_manually_corrupted_future_reference_as_integrity_failure(t
     assert report["execution_authorized"] is False
 
 
+def test_report_detects_submicrosecond_future_reference_with_same_iso_projection(tmp_path):
+    journal = tmp_path / "submicrosecond-corrupt.jsonl"
+    observed_at = datetime(2026, 8, 17, 13, 30, 10, 123456, tzinfo=timezone.utc)
+    primary_ns = datetime_to_unix_ns(observed_at)
+    journal.write_text(
+        '{"status":"matched","scoreable":true,"no_lookahead_enforced":true,'
+        '"reference_lag_seconds":0.0,'
+        f'"primary":{{"observed_at":"{observed_at.isoformat()}","observed_at_ns":{primary_ns}}},'
+        f'"reference":{{"observed_at":"{observed_at.isoformat()}","observed_at_ns":{primary_ns + 1}}}}}\n',
+        encoding="utf-8",
+    )
+
+    report = build_sync_coverage_report(journal)
+
+    assert report["status"] == "integrity_failure"
+    assert report["summary"]["lookahead_violations"] == 1
+    assert report["summary"]["timestamp_consistency_violations"] == 0
+
+
+def test_report_detects_raw_nanosecond_timestamp_inconsistent_with_iso_projection(tmp_path):
+    journal = tmp_path / "timestamp-corrupt.jsonl"
+    observed_at = datetime(2026, 8, 17, 13, 30, 10, 123456, tzinfo=timezone.utc)
+    observed_ns = datetime_to_unix_ns(observed_at)
+    journal.write_text(
+        '{"status":"missing_reference","scoreable":false,"no_lookahead_enforced":true,'
+        '"reference_lag_seconds":null,'
+        f'"primary":{{"observed_at":"{observed_at.isoformat()}","observed_at_ns":{observed_ns + 1000}}},'
+        '"reference":null}\n',
+        encoding="utf-8",
+    )
+
+    report = build_sync_coverage_report(journal)
+
+    assert report["status"] == "integrity_failure"
+    assert report["summary"]["timestamp_consistency_violations"] == 1
+    assert report["summary"]["lookahead_violations"] == 0
+
+
 def test_empty_sync_report_is_safe_and_does_not_enable_features(tmp_path):
     journal = tmp_path / "missing.jsonl"
 
@@ -95,6 +138,7 @@ def test_empty_sync_report_is_safe_and_does_not_enable_features(tmp_path):
     assert report["status"] == "ok"
     assert report["summary"]["total"] == 0
     assert report["summary"]["scoreable_fraction"] == 0.0
+    assert report["summary"]["timestamp_consistency_violations"] == 0
     assert report["production_feature_enabled"] is False
     assert report["production_predictor_changed"] is False
     assert report["execution_authorized"] is False
