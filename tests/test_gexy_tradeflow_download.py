@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from datetime import date, time
 from pathlib import Path
 
@@ -114,3 +116,18 @@ def test_download_window_requests_exact_tcbbo_scope_and_promotes_partial(tmp_pat
             "path": str(partial),
         }
     ]
+
+
+def test_direct_script_launch_can_render_help() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "scripts" / "gexy_tradeflow_download.py"
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Fail-closed downloader for bounded GEXY SPXW TCBBO research data" in result.stdout
