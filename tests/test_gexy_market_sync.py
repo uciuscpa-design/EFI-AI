@@ -4,6 +4,7 @@ import pytest
 
 from packages.gexy.market_sync import (
     MarketObservation,
+    inferred_spot_observation,
     latest_at_or_before,
     pair_to_record,
     synchronize_primary_with_reference,
@@ -30,6 +31,38 @@ def _observation(
         received_at=observed_at + timedelta(seconds=received_delay_seconds),
         source=source,
     )
+
+
+def test_inferred_spot_anchor_is_latest_required_source_quote():
+    base = datetime(2026, 8, 17, 13, 30, tzinfo=timezone.utc)
+    call_time = base + timedelta(seconds=10.1)
+    put_time = base + timedelta(seconds=10.4)
+    received_at = base + timedelta(seconds=10.9)
+
+    observation = inferred_spot_observation(
+        symbol="SPX",
+        price=7600.0,
+        source_quote_times=[call_time, put_time],
+        received_at=received_at,
+        source="alpaca_options_parity",
+    )
+
+    assert observation.observed_at == put_time
+    assert observation.received_at == received_at
+    assert observation.instrument_type == "cash_index_inferred"
+    assert observation.acquisition_latency_seconds == pytest.approx(0.5)
+
+
+def test_inferred_spot_requires_timestamped_source_quotes():
+    base = datetime(2026, 8, 17, 13, 30, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="source_quote_times must not be empty"):
+        inferred_spot_observation(
+            symbol="SPX",
+            price=7600.0,
+            source_quote_times=[],
+            received_at=base,
+            source="alpaca_options_parity",
+        )
 
 
 def test_latest_at_or_before_never_selects_closer_future_reference():
