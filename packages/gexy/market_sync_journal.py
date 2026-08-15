@@ -7,7 +7,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Iterable
 
-from .market_sync import SynchronizedMarketPair, pair_to_record
+from .market_sync import SynchronizedMarketPair, datetime_to_unix_ns, pair_to_record
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,7 @@ class SyncCoverageSummary:
     p95_reference_lag_seconds: float | None
     lookahead_violations: int
     provenance_flag_violations: int
+    timestamp_consistency_violations: int
 
 
 def append_sync_pair(path: str | Path, pair: SynchronizedMarketPair) -> None:
@@ -67,6 +68,36 @@ def _timestamp(payload: object, key: str) -> datetime | None:
     return parsed
 
 
+def _event_time_ns(payload: object) -> int | None:
+    if not isinstance(payload, dict):
+        return None
+    raw_ns = payload.get("observed_at_ns")
+    if raw_ns is not None:
+        try:
+            value = int(raw_ns)
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+    timestamp = _timestamp(payload, "observed_at")
+    return None if timestamp is None else datetime_to_unix_ns(timestamp)
+
+
+def _timestamp_consistent(payload: object) -> bool:
+    if not isinstance(payload, dict):
+        return True
+    raw_ns = payload.get("observed_at_ns")
+    if raw_ns is None:
+        return True  # legacy microsecond-only rows remain readable
+    timestamp = _timestamp(payload, "observed_at")
+    if timestamp is None:
+        return False
+    try:
+        event_ns = int(raw_ns)
+    except (TypeError, ValueError):
+        return False
+    return event_ns > 0 and event_ns // 1_000 == datetime_to_unix_ns(timestamp) // 1_000
+
+
 def summarize_sync_records(records: Iterable[dict[str, object]]) -> SyncCoverageSummary:
     rows = list(records)
     matched = sum(row.get("status") == "matched" for row in rows)
@@ -82,12 +113,21 @@ def summarize_sync_records(records: Iterable[dict[str, object]]) -> SyncCoverage
 
     lookahead_violations = 0
     provenance_flag_violations = 0
+    timestamp_consistency_violations = 0
     for row in rows:
         if row.get("no_lookahead_enforced") is not True:
             provenance_flag_violations += 1
-        primary_time = _timestamp(row.get("primary"), "observed_at")
-        reference_time = _timestamp(row.get("reference"), "observed_at")
-        if primary_time is not None and reference_time is not None and reference_time > primary_time:
+
+        primary_payload = row.get("primary")
+        reference_payload = row.get("reference")
+        if not _timestamp_consistent(primary_payload):
+            timestamp_consistency_violations += 1
+        if reference_payload is not None and not _timestamp_consistent(reference_payload):
+            timestamp_consistency_violations += 1
+
+        primary_ns = _event_time_ns(primary_payload)
+        reference_ns = _event_time_ns(reference_payload)
+        if primary_ns is not None and reference_ns is not None and reference_ns > primary_ns:
             lookahead_violations += 1
 
     return SyncCoverageSummary(
@@ -102,13 +142,19 @@ def summarize_sync_records(records: Iterable[dict[str, object]]) -> SyncCoverage
         p95_reference_lag_seconds=_percentile_nearest_rank(lags, 0.95),
         lookahead_violations=lookahead_violations,
         provenance_flag_violations=provenance_flag_violations,
+        timestamp_consistency_violations=timestamp_consistency_violations,
     )
 
 
 def build_sync_coverage_report(path: str | Path) -> dict[str, object]:
     summary = summarize_sync_records(load_sync_records(path))
+    integrity_ok = (
+        summary.lookahead_violations == 0
+        and summary.provenance_flag_violations == 0
+        and summary.timestamp_consistency_violations == 0
+    )
     return {
-        "status": "ok" if summary.lookahead_violations == 0 and summary.provenance_flag_violations == 0 else "integrity_failure",
+        "status": "ok" if integrity_ok else "integrity_failure",
         "journal": str(path),
         "summary": asdict(summary),
         "production_feature_enabled": False,
@@ -117,6 +163,7 @@ def build_sync_coverage_report(path: str | Path) -> dict[str, object]:
         "interpretation": [
             "This report measures synchronization integrity and coverage only; it does not establish predictive value.",
             "Only matched scoreable rows are eligible for a later versioned ES-derived research hypothesis.",
-            "Any future-reference timestamp is a hard lookahead violation.",
+            "Any future-reference timestamp, including a sub-microsecond future timestamp, is a hard lookahead violation.",
+            "Raw nanosecond timestamps must agree with their human-readable datetime projection at microsecond precision.",
         ],
     }
