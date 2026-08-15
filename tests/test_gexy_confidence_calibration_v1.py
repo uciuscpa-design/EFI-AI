@@ -127,8 +127,12 @@ def test_selection_session_is_fit_only_and_never_validation(tmp_path):
         index_offset=100,
     )
 
-    report = build_confidence_calibration_v1_report(journal_path=journal)
+    report = build_confidence_calibration_v1_report(
+        journal_path=journal,
+        expected_fingerprint=None,
+    )
     assert report["status"] == "awaiting_independent_sessions"
+    assert report["selection_model_fingerprint_match"] is True
     assert report["selection_session_is_validation"] is False
     assert report["selection_fit_diagnostic"]["scored"] == 80
     assert report["independent_sessions"] == []
@@ -173,7 +177,10 @@ def test_one_good_future_session_improves_brier_but_cannot_pass_gate(tmp_path):
         index_offset=300,
     )
 
-    report = build_confidence_calibration_v1_report(journal_path=journal)
+    report = build_confidence_calibration_v1_report(
+        journal_path=journal,
+        expected_fingerprint=None,
+    )
     session = report["independent_sessions"][0]
     assert report["status"] == "collecting_independent_evidence"
     assert session["informative"] is True
@@ -182,3 +189,52 @@ def test_one_good_future_session_improves_brier_but_cannot_pass_gate(tmp_path):
     assert session["brier_improvement_vs_0_5"] > 0.0
     assert report["promotion_gate"]["positive_session_count"] == 1
     assert report["promotion_gate"]["met"] is False
+
+
+def test_fingerprint_mismatch_blocks_future_scoring(tmp_path):
+    journal = tmp_path / "shadow.jsonl"
+    _append_group(
+        journal,
+        session_date=date(2026, 8, 14),
+        direction="down",
+        rows=40,
+        hits=32,
+        index_offset=0,
+    )
+    _append_group(
+        journal,
+        session_date=date(2026, 8, 14),
+        direction="up",
+        rows=40,
+        hits=8,
+        index_offset=100,
+    )
+    _append_group(
+        journal,
+        session_date=date(2026, 8, 17),
+        direction="down",
+        rows=30,
+        hits=24,
+        index_offset=200,
+    )
+    _append_group(
+        journal,
+        session_date=date(2026, 8, 17),
+        direction="up",
+        rows=30,
+        hits=6,
+        index_offset=300,
+    )
+
+    report = build_confidence_calibration_v1_report(
+        journal_path=journal,
+        expected_fingerprint="definitely-not-the-selection-model",
+    )
+    assert report["status"] == "selection_model_drift"
+    assert report["selection_model_fingerprint_match"] is False
+    assert report["independent_sessions"] == []
+    assert report["promotion_gate"]["blocked_reason"] == "selection_model_fingerprint_mismatch"
+    assert report["promotion_gate"]["met"] is False
+    assert report["production_confidence_replacement_authorized"] is False
+    assert report["production_direction_change_authorized"] is False
+    assert report["execution_authorized"] is False
