@@ -9,22 +9,56 @@ import pandas as pd
 # V3 intentionally uses only changes/rates known at the prediction timestamp.
 # Level-like wall distances and concentration levels are excluded because the
 # first 0DTE replay showed severe morning-to-afternoon distribution drift.
-DELTA_ONLY_FEATURES = (
+MOMENTUM_FEATURES = (
     "backward_return_1m_bps",
+)
+
+GEX_GAX_DYNAMICS_FEATURES = (
     "d_total_gax_forward_proxy_per_point",
     "d_total_unsigned_gex_forward_proxy_per_1pct",
     "d_heuristic_signed_gex_forward_proxy_per_1pct",
     "unsigned_gex_change_1m_pct",
+)
+
+WALL_MIGRATION_FEATURES = (
     "d_strongest_unsigned_wall",
     "d_strongest_positive_heuristic_wall",
     "d_strongest_negative_heuristic_wall",
+)
+
+CONCENTRATION_FEATURES = (
     "d_top1_unsigned_gex_concentration",
     "d_top5_unsigned_gex_concentration",
+)
+
+IV_SKEW_FEATURES = (
     "d_near_iv_skew_put_minus_call",
     "d_median_implied_volatility",
+)
+
+QUALITY_FEATURES = (
     "d_parity_median_abs_residual",
     "d_greeks_solved_pct",
 )
+
+DELTA_ONLY_FEATURES = (
+    *MOMENTUM_FEATURES,
+    *GEX_GAX_DYNAMICS_FEATURES,
+    *WALL_MIGRATION_FEATURES,
+    *CONCENTRATION_FEATURES,
+    *IV_SKEW_FEATURES,
+    *QUALITY_FEATURES,
+)
+
+DELTA_FEATURE_GROUPS = {
+    "momentum": MOMENTUM_FEATURES,
+    "gex_gax_dynamics": GEX_GAX_DYNAMICS_FEATURES,
+    "wall_migration": WALL_MIGRATION_FEATURES,
+    "concentration": CONCENTRATION_FEATURES,
+    "iv_skew": IV_SKEW_FEATURES,
+    "quality": QUALITY_FEATURES,
+    "combined": DELTA_ONLY_FEATURES,
+}
 
 
 @dataclass(frozen=True)
