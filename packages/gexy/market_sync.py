@@ -1,17 +1,40 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterable
+
+
+_EPOCH_UTC = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def datetime_to_unix_ns(value: datetime) -> int:
+    """Convert an aware datetime to exact integer Unix nanoseconds.
+
+    Python datetime is microsecond-resolution, so this conversion never routes
+    through floating point. Providers with finer timestamps can additionally set
+    `observed_at_ns` on MarketObservation to preserve their raw event ordering.
+    """
+    if value.tzinfo is None:
+        raise ValueError("datetime must be timezone-aware")
+    delta = value.astimezone(timezone.utc) - _EPOCH_UTC
+    return (
+        (delta.days * 86_400 + delta.seconds) * 1_000_000_000
+        + delta.microseconds * 1_000
+    )
 
 
 @dataclass(frozen=True)
 class MarketObservation:
     """One provider-timestamped market observation.
 
-    `observed_at` is the provider/event timestamp used for point-in-time joins.
-    `received_at` is when GEXY acquired the observation. Both are preserved so
-    latency can be audited instead of silently collapsed into one timestamp.
+    `observed_at` is a human-readable provider/event timestamp.
+    `observed_at_ns` optionally preserves a provider's finer raw Unix-nanosecond
+    timestamp. Point-in-time joins use `event_time_ns`, not datetime comparison,
+    so a reference even one nanosecond after the anchor is never accepted.
+
+    `received_at` is when GEXY acquired the observation. Event and acquisition
+    time are preserved independently so latency can be audited.
     """
 
     symbol: str
@@ -20,6 +43,7 @@ class MarketObservation:
     observed_at: datetime
     received_at: datetime
     source: str
+    observed_at_ns: int | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
@@ -34,10 +58,25 @@ class MarketObservation:
             raise ValueError("received_at must be timezone-aware")
         if not self.source.strip():
             raise ValueError("source must not be empty")
+        if self.observed_at_ns is not None:
+            if self.observed_at_ns <= 0:
+                raise ValueError("observed_at_ns must be positive")
+            # The datetime projection may lose sub-microsecond precision, but it
+            # must still represent the same Unix microsecond as the raw ns value.
+            if self.observed_at_ns // 1_000 != datetime_to_unix_ns(self.observed_at) // 1_000:
+                raise ValueError("observed_at_ns is inconsistent with observed_at")
+
+    @property
+    def event_time_ns(self) -> int:
+        return self.observed_at_ns if self.observed_at_ns is not None else datetime_to_unix_ns(self.observed_at)
+
+    @property
+    def received_time_ns(self) -> int:
+        return datetime_to_unix_ns(self.received_at)
 
     @property
     def acquisition_latency_seconds(self) -> float:
-        return (self.received_at - self.observed_at).total_seconds()
+        return (self.received_time_ns - self.event_time_ns) / 1_000_000_000
 
 
 @dataclass(frozen=True)
@@ -45,8 +84,9 @@ class SynchronizedMarketPair:
     """Point-in-time pair anchored on a primary market observation.
 
     The reference observation is always at-or-before the primary event timestamp.
-    A future reference is never selected, which makes the join safe for replay and
-    forward validation. Stale matches are retained for diagnostics but unscoreable.
+    A future reference is never selected, including a reference that differs only
+    at sub-microsecond precision. Stale matches are retained for diagnostics but
+    remain unscoreable.
     """
 
     primary: MarketObservation
@@ -79,13 +119,15 @@ def inferred_spot_observation(
         raise ValueError("source_quote_times must not be empty")
     if any(value.tzinfo is None for value in quote_times):
         raise ValueError("source_quote_times must be timezone-aware")
+    safe_anchor = max(quote_times)
     return MarketObservation(
         symbol=symbol,
         instrument_type=instrument_type,
         price=price,
-        observed_at=max(quote_times),
+        observed_at=safe_anchor,
         received_at=received_at,
         source=source,
+        observed_at_ns=datetime_to_unix_ns(safe_anchor),
     )
 
 
@@ -98,18 +140,25 @@ def latest_at_or_before(
     observations: Iterable[MarketObservation],
     *,
     anchor_at: datetime,
+    anchor_at_ns: int | None = None,
 ) -> MarketObservation | None:
-    """Return the latest observation whose event time is <= `anchor_at`.
+    """Return the latest observation whose exact event time is <= the anchor.
 
     No interpolation and no nearest-neighbor search are used because either could
     accidentally consume a later observation during historical replay.
     """
     if anchor_at.tzinfo is None:
         raise ValueError("anchor_at must be timezone-aware")
-    eligible = [observation for observation in observations if observation.observed_at <= anchor_at]
+    anchor_ns = datetime_to_unix_ns(anchor_at) if anchor_at_ns is None else int(anchor_at_ns)
+    if anchor_ns <= 0:
+        raise ValueError("anchor_at_ns must be positive")
+    if anchor_ns // 1_000 != datetime_to_unix_ns(anchor_at) // 1_000:
+        raise ValueError("anchor_at_ns is inconsistent with anchor_at")
+
+    eligible = [observation for observation in observations if observation.event_time_ns <= anchor_ns]
     if not eligible:
         return None
-    return max(eligible, key=lambda observation: observation.observed_at)
+    return max(eligible, key=lambda observation: observation.event_time_ns)
 
 
 def synchronize_primary_with_reference(
@@ -120,7 +169,11 @@ def synchronize_primary_with_reference(
 ) -> SynchronizedMarketPair:
     """Synchronize one primary event with the latest non-future reference event."""
     _validate_max_lag(max_lag_seconds)
-    reference = latest_at_or_before(references, anchor_at=primary.observed_at)
+    reference = latest_at_or_before(
+        references,
+        anchor_at=primary.observed_at,
+        anchor_at_ns=primary.event_time_ns,
+    )
     if reference is None:
         return SynchronizedMarketPair(
             primary=primary,
@@ -131,7 +184,8 @@ def synchronize_primary_with_reference(
             scoreable=False,
         )
 
-    lag_seconds = (primary.observed_at - reference.observed_at).total_seconds()
+    lag_ns = primary.event_time_ns - reference.event_time_ns
+    lag_seconds = lag_ns / 1_000_000_000
     if lag_seconds > max_lag_seconds:
         return SynchronizedMarketPair(
             primary=primary,
@@ -171,34 +225,27 @@ def synchronize_series(
     )
 
 
+def _observation_record(observation: MarketObservation) -> dict[str, object]:
+    return {
+        "symbol": observation.symbol,
+        "instrument_type": observation.instrument_type,
+        "price": observation.price,
+        "observed_at": observation.observed_at.isoformat(),
+        "observed_at_ns": observation.event_time_ns,
+        "received_at": observation.received_at.isoformat(),
+        "source": observation.source,
+        "acquisition_latency_seconds": observation.acquisition_latency_seconds,
+    }
+
+
 def pair_to_record(pair: SynchronizedMarketPair) -> dict[str, object]:
-    """Serialize a sync result while preserving provenance and both timestamps."""
-    primary = pair.primary
-    reference = pair.reference
+    """Serialize a sync result while preserving provenance and exact event order."""
     return {
         "status": pair.status,
         "scoreable": pair.scoreable,
         "no_lookahead_enforced": pair.no_lookahead_enforced,
         "max_lag_seconds": pair.max_lag_seconds,
         "reference_lag_seconds": pair.reference_lag_seconds,
-        "primary": {
-            "symbol": primary.symbol,
-            "instrument_type": primary.instrument_type,
-            "price": primary.price,
-            "observed_at": primary.observed_at.isoformat(),
-            "received_at": primary.received_at.isoformat(),
-            "source": primary.source,
-            "acquisition_latency_seconds": primary.acquisition_latency_seconds,
-        },
-        "reference": None
-        if reference is None
-        else {
-            "symbol": reference.symbol,
-            "instrument_type": reference.instrument_type,
-            "price": reference.price,
-            "observed_at": reference.observed_at.isoformat(),
-            "received_at": reference.received_at.isoformat(),
-            "source": reference.source,
-            "acquisition_latency_seconds": reference.acquisition_latency_seconds,
-        },
+        "primary": _observation_record(pair.primary),
+        "reference": None if pair.reference is None else _observation_record(pair.reference),
     }
