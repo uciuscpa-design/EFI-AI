@@ -32,7 +32,9 @@ def add_change_features(frame: pd.DataFrame) -> pd.DataFrame:
     if "forward" in result.columns:
         previous = pd.to_numeric(result["forward"], errors="coerce").shift(1)
         current = pd.to_numeric(result["forward"], errors="coerce")
-        result["forward_return_1m_bps"] = (current / previous - 1.0) * 10_000.0
+        # This is known at the current timestamp (t-1 -> t), so keep its name
+        # explicitly backward-looking. Future labels use forward_return_* names.
+        result["backward_return_1m_bps"] = (current / previous - 1.0) * 10_000.0
 
     if "total_unsigned_gex_forward_proxy_per_1pct" in result.columns:
         previous = pd.to_numeric(
