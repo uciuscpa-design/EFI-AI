@@ -158,7 +158,7 @@ def main() -> int:
             "method": "median_same_strike_call_put_parity_mid",
             "source": "alpaca_options_chain",
             "acquired_at": result.timestamp.isoformat(),
-            "parity_pair_quote_times": _time_range(result.spot_quote_times),
+            "parity_pair_quote_times": _time_range(getattr(result, "spot_quote_times", ())),
             "usable_option_quote_times": _time_range(result.quote_times),
             "point_in_time_sync_note": "SPX spot is inferred from the selected parity pair; acquisition time is not represented as the spot event timestamp.",
         },
@@ -179,7 +179,7 @@ def main() -> int:
             else "disabled_by_flag" if args.no_journal else "outside_alpaca_market_session"
         ),
         "journal_path": journal_path,
-        "shadow_journal_path": shadow_journal_path,
+        "shadow_journal_path": shadow_journal_path if journaling_allowed else None,
         "gax_shadow_journal_path": gax_shadow_path,
         "journaled_forecasts": len(forecasts) if journaling_allowed else 0,
         "journaled_fine_shadow_forecasts": len(fine_shadow_forecasts) if journaling_allowed else 0,
