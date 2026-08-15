@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import timedelta
 
 import pandas as pd
 
@@ -87,8 +88,9 @@ def add_forward_horizon_labels(
         horizon = int(raw_horizon)
         if horizon < 1:
             raise ValueError("forecast horizons must be positive minutes")
+        horizon_delta = timedelta(minutes=horizon)
         future_values = [
-            forward_by_time.get(timestamp + pd.Timedelta(minutes=horizon))
+            forward_by_time.get(timestamp + horizon_delta)
             for timestamp in result["timestamp"]
         ]
         future = pd.Series(future_values, index=result.index, dtype="float64")
