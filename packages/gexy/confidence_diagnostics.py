@@ -86,6 +86,61 @@ def _components(row: JoinedShadowRow) -> dict[str, float]:
     }
 
 
+def _direction_counts(rows: Sequence[JoinedShadowRow]) -> dict[str, int]:
+    return {
+        "up": sum(row.entry.prediction.direction == "up" for row in rows),
+        "down": sum(row.entry.prediction.direction == "down" for row in rows),
+        "flat": sum(row.entry.prediction.direction == "flat" for row in rows),
+    }
+
+
+def _realized_counts(rows: Sequence[JoinedShadowRow]) -> dict[str, int]:
+    realized = [_realized_direction(row) for row in rows]
+    return {
+        "up": sum(value == "up" for value in realized),
+        "down": sum(value == "down" for value in realized),
+        "flat": sum(value == "flat" for value in realized),
+    }
+
+
+def _direction_summary(
+    rows: Sequence[JoinedShadowRow],
+    components: Sequence[dict[str, float]],
+    *,
+    direction: str,
+) -> dict[str, object]:
+    pairs = [
+        (row, component)
+        for row, component in zip(rows, components)
+        if row.entry.prediction.direction == direction
+    ]
+    if not pairs:
+        return {"rows": 0, "status": "no_rows"}
+
+    selected_rows = [row for row, _ in pairs]
+    raw = [component["raw"] for _, component in pairs]
+    correctness = [
+        1.0 if row.entry.prediction.direction == _realized_direction(row) else 0.0
+        for row in selected_rows
+    ]
+    abs_realized_move = [abs(float(row.entry.realized_move_points or 0.0)) for row in selected_rows]
+    return {
+        "status": "ok",
+        "rows": len(selected_rows),
+        "directional_accuracy": mean(correctness),
+        "realized_counts": _realized_counts(selected_rows),
+        "raw_score": {
+            "min": min(raw),
+            "p25": _percentile(raw, 0.25),
+            "median": median(raw),
+            "p75": _percentile(raw, 0.75),
+            "max": max(raw),
+            "pearson_to_correctness": _pearson(raw, correctness),
+            "pearson_to_abs_realized_move": _pearson(raw, abs_realized_move),
+        },
+    }
+
+
 def _quartile_accuracy(rows: Sequence[JoinedShadowRow], raw_values: Sequence[float]) -> list[dict[str, object]]:
     if not rows:
         return []
@@ -116,6 +171,13 @@ def _quartile_accuracy(rows: Sequence[JoinedShadowRow], raw_values: Sequence[flo
                 "raw_min": min(bucket_raw) if bucket_raw else None,
                 "raw_max": max(bucket_raw) if bucket_raw else None,
                 "directional_accuracy": correct / len(bucket) if bucket else None,
+                "predicted_counts": _direction_counts(bucket),
+                "realized_counts": _realized_counts(bucket),
+                "predicted_down_fraction": (
+                    sum(row.entry.prediction.direction == "down" for row in bucket) / len(bucket)
+                    if bucket
+                    else None
+                ),
             }
         )
     return output
@@ -145,6 +207,8 @@ def _summarize(rows: Sequence[JoinedShadowRow]) -> dict[str, object]:
         "rows": len(rows),
         "unique_observations": len({row.entry.created_at for row in rows}),
         "directional_accuracy": mean(correctness),
+        "predicted_counts": _direction_counts(rows),
+        "realized_counts": _realized_counts(rows),
         "reported_confidence": {
             "min": min(reported),
             "median": median(reported),
@@ -170,6 +234,10 @@ def _summarize(rows: Sequence[JoinedShadowRow]) -> dict[str, object]:
             "median_denominator": median(denominator),
             "median_slope_share_of_structure": median(slope_share),
             "p05_slope_share_of_structure": _percentile(slope_share, 0.05),
+        },
+        "by_predicted_direction": {
+            direction: _direction_summary(rows, components, direction=direction)
+            for direction in ("up", "down")
         },
         "accuracy_by_raw_quartile": _quartile_accuracy(rows, raw),
         "saturation_confirmed": cap_fraction >= 0.95 and raw_cap_fraction >= 0.95,
@@ -207,6 +275,7 @@ def build_confidence_diagnostics(
         "interpretation": [
             "Reported confidence is not a calibrated probability and must not be treated as one.",
             "If local-GEX slope dominates the structure term, the current formula mixes incompatible feature scales and can saturate mechanically.",
+            "Raw-score accuracy must be inspected within predicted direction because direction imbalance can create false confidence ranking.",
             "Rescaling alone is not sufficient evidence of predictive confidence; any replacement must be calibrated on earlier data and validated on later independent sessions.",
             "This diagnostic does not modify the production predictor and does not authorize execution.",
         ],
