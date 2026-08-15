@@ -58,6 +58,37 @@ class SynchronizedMarketPair:
     no_lookahead_enforced: bool = True
 
 
+def inferred_spot_observation(
+    *,
+    symbol: str,
+    price: float,
+    source_quote_times: Iterable[datetime],
+    received_at: datetime,
+    source: str,
+    instrument_type: str = "cash_index_inferred",
+) -> MarketObservation:
+    """Create an inferred spot observation at the first safe information time.
+
+    If a synthetic value depends on multiple source quotes, the value does not
+    exist point-in-time until the latest required quote has occurred. Using the
+    latest source event timestamp prevents an earlier anchor from leaking one of
+    the inputs used to construct the inferred spot.
+    """
+    quote_times = tuple(source_quote_times)
+    if not quote_times:
+        raise ValueError("source_quote_times must not be empty")
+    if any(value.tzinfo is None for value in quote_times):
+        raise ValueError("source_quote_times must be timezone-aware")
+    return MarketObservation(
+        symbol=symbol,
+        instrument_type=instrument_type,
+        price=price,
+        observed_at=max(quote_times),
+        received_at=received_at,
+        source=source,
+    )
+
+
 def _validate_max_lag(max_lag_seconds: float) -> None:
     if max_lag_seconds < 0:
         raise ValueError("max_lag_seconds must be non-negative")
