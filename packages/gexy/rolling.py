@@ -76,6 +76,23 @@ class ShrinkageChoice:
     improvement_pct: float
 
 
+def _chronological_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    """Return a chronological frame plus UTC timestamps without needless re-sorts.
+
+    Causal evaluators call the history helpers thousands of times against frames
+    that are already timestamp-sorted.  The previous implementation sorted the
+    entire frame on every call.  Preserve identical ordering semantics while
+    taking the fast path when the caller already provides monotonic timestamps.
+    """
+    timestamps = pd.to_datetime(frame["timestamp"], utc=True)
+    if timestamps.is_monotonic_increasing:
+        return frame, timestamps
+    order = np.argsort(timestamps.to_numpy(), kind="stable")
+    ordered = frame.iloc[order].copy()
+    ordered_timestamps = timestamps.iloc[order]
+    return ordered, ordered_timestamps
+
+
 def eligible_history(
     frame: pd.DataFrame,
     *,
@@ -87,10 +104,15 @@ def eligible_history(
     if max_rows < 1:
         raise ValueError("max_rows must be positive")
     horizon = pd.Timedelta(minutes=int(horizon_minutes))
-    ordered = frame.sort_values("timestamp").copy()
-    timestamps = pd.to_datetime(ordered["timestamp"], utc=True)
-    known = ordered.loc[timestamps + horizon < pd.Timestamp(prediction_time)].copy()
-    return known.tail(max_rows).reset_index(drop=True)
+    ordered, timestamps = _chronological_frame(frame)
+    cutoff = pd.Timestamp(prediction_time) - horizon
+
+    # Strictly preserve: timestamp + horizon < prediction_time.
+    # searchsorted(..., side="left") returns the first timestamp >= cutoff,
+    # therefore every row before end satisfies timestamp < cutoff.
+    end = int(timestamps.searchsorted(cutoff, side="left"))
+    start = max(0, end - max_rows)
+    return ordered.iloc[start:end].copy().reset_index(drop=True)
 
 
 def inner_purged_split(
@@ -108,12 +130,17 @@ def inner_purged_split(
     if len(history) <= validation_rows:
         raise ValueError("history is too short for validation split")
 
-    ordered = history.sort_values("timestamp").reset_index(drop=True)
+    ordered, timestamps = _chronological_frame(history)
+    ordered = ordered.reset_index(drop=True)
+    timestamps = timestamps.reset_index(drop=True)
     validation = ordered.tail(validation_rows).copy()
     validation_start = pd.Timestamp(validation.iloc[0]["timestamp"])
     horizon = pd.Timedelta(minutes=int(horizon_minutes))
-    timestamps = pd.to_datetime(ordered["timestamp"], utc=True)
-    fit = ordered.loc[timestamps + horizon < validation_start].copy()
+    cutoff = validation_start - horizon
+
+    # Strictly preserve: fit_timestamp + horizon < validation_start.
+    fit_end = int(timestamps.searchsorted(cutoff, side="left"))
+    fit = ordered.iloc[:fit_end].copy()
     if len(fit) < min_fit_rows:
         raise ValueError("purged inner split left too few fit rows")
     return InnerSplit(fit=fit, validation=validation, validation_start=validation_start)
