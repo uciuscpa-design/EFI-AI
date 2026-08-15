@@ -4,6 +4,7 @@ import pytest
 
 from packages.gexy.market_sync import (
     MarketObservation,
+    datetime_to_unix_ns,
     inferred_spot_observation,
     latest_at_or_before,
     pair_to_record,
@@ -48,6 +49,7 @@ def test_inferred_spot_anchor_is_latest_required_source_quote():
     )
 
     assert observation.observed_at == put_time
+    assert observation.event_time_ns == datetime_to_unix_ns(put_time)
     assert observation.received_at == received_at
     assert observation.instrument_type == "cash_index_inferred"
     assert observation.acquisition_latency_seconds == pytest.approx(0.5)
@@ -77,6 +79,37 @@ def test_latest_at_or_before_never_selects_closer_future_reference():
     assert selected is not None
     assert selected.observed_at == references[0].observed_at
     assert selected.price == 7610.0
+
+
+def test_submicrosecond_future_reference_is_rejected_even_with_same_datetime_projection():
+    observed_at = datetime(2026, 8, 17, 13, 30, 10, 123456, tzinfo=timezone.utc)
+    anchor_ns = datetime_to_unix_ns(observed_at)
+    primary = MarketObservation(
+        symbol="SPX",
+        instrument_type="cash_index_inferred",
+        price=7600.0,
+        observed_at=observed_at,
+        observed_at_ns=anchor_ns,
+        received_at=observed_at + timedelta(milliseconds=5),
+        source="alpaca_options_parity",
+    )
+    future_reference = MarketObservation(
+        symbol="ESU6",
+        instrument_type="future",
+        price=7610.0,
+        observed_at=observed_at,
+        observed_at_ns=anchor_ns + 1,
+        received_at=observed_at + timedelta(milliseconds=5),
+        source="databento:GLBX.MDP3",
+    )
+
+    pair = synchronize_primary_with_reference(primary, [future_reference], max_lag_seconds=5.0)
+
+    assert future_reference.observed_at == primary.observed_at
+    assert future_reference.event_time_ns == primary.event_time_ns + 1
+    assert pair.status == "missing_reference"
+    assert pair.reference is None
+    assert pair.scoreable is False
 
 
 def test_exact_timestamp_match_is_scoreable():
@@ -130,7 +163,7 @@ def test_series_join_preserves_no_lookahead_for_each_primary():
 
     assert [pair.reference.price for pair in pairs if pair.reference is not None] == [7608.0, 7610.0]
     assert all(pair.scoreable for pair in pairs)
-    assert all(pair.reference.observed_at <= pair.primary.observed_at for pair in pairs if pair.reference)
+    assert all(pair.reference.event_time_ns <= pair.primary.event_time_ns for pair in pairs if pair.reference)
 
 
 def test_serialized_record_preserves_source_and_event_vs_receive_timestamps():
@@ -159,6 +192,8 @@ def test_serialized_record_preserves_source_and_event_vs_receive_timestamps():
     assert record["no_lookahead_enforced"] is True
     assert record["primary"]["source"] == "spx-provider"
     assert record["reference"]["source"] == "es-provider"
+    assert record["primary"]["observed_at_ns"] == primary.event_time_ns
+    assert record["reference"]["observed_at_ns"] == reference.event_time_ns
     assert record["primary"]["observed_at"] != record["primary"]["received_at"]
     assert record["reference"]["observed_at"] != record["reference"]["received_at"]
 
