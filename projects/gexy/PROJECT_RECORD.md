@@ -186,10 +186,45 @@ Completed:
 Tracking:
 - GitHub Issue #6: `GEXY: historical options data and calibration pipeline`.
 
+### Milestone 1 live-shadow calibration checkpoint — 2026-08-14
+
+Completed:
+- Verified real SPX options ingestion through Alpaca while preserving quote/trade/open-interest timestamp provenance and missing provider IV/Greeks as missing.
+- Built a Windows session collector with raw observations, production prediction journal, full 1–60 minute shadow grid, leakage-safe label resolution, immutable session snapshots, cadence diagnostics and strict readiness checks.
+- Matched **9,140 / 9,140** resolved shadow forecasts to source-time live feature observations for research diagnostics.
+- Confirmed the current first-pass shadow predictor is not promotion-ready: overall direction accuracy was about **52.17%** versus about **73.84%** for the best constant-direction (`always down`) baseline in the resolved sample.
+- Isolated the predicted-up branch as the dominant wrong-sign failure mode and confirmed that blindly flipping all up calls merely reproduces the always-down baseline rather than establishing alpha.
+- Added live feature ablation for local GEX slope, hedge acceleration, wall distances, spot momentum and time-of-day with exact timestamp joins and Windows UTF-8/UTF-16 log normalization.
+- Preregistered `GEXY-H5-SLOPE-INVERT-v1` as a 5-minute negative-gamma shadow hypothesis after an exploratory late-session result; production direction logic was not changed.
+- Added an independent-session H5 evaluator that excludes the 2026-08-14 selection session and requires at least two later informative sessions with positive lift plus positive aggregate lift before shadow-experiment review.
+- Audited the original confidence formula and confirmed mechanical saturation at 0.95 because local-GEX slope numerically dominates the structure term by orders of magnitude. Raw-score accuracy was non-monotonic and strongly confounded with predicted direction, so simple rescaling was rejected.
+- Preregistered `GEXY-CONFIDENCE-CAL-v1`, a research-only estimate of `P(current predicted direction is correct)` conditioned on production horizon, current predicted direction and the observed negative-gamma regime.
+- Frozen `GEXY-CONFIDENCE-CAL-v1` with Jeffreys/Beta smoothing on the 2026-08-14 selection sample. The frozen artifact is `projects/gexy/research/CONFIDENCE_CALIBRATION_V1_MODEL.json`.
+- Frozen calibration fingerprint: `24b38617e061c18a864c3c871c863504e10a3c146eb81d3c7f4cded93b81cab0`.
+- Added a hard fingerprint drift guard: any change to the frozen selection fit returns `selection_model_drift` and blocks future-session scoring instead of silently refitting v1.
+- Full Windows test suite after the frozen-model drift guard: **205 passed**, with one unrelated Starlette/httpx deprecation warning.
+- Real integrity rerun confirmed expected fingerprint equals actual fingerprint and calibration status is `awaiting_independent_sessions`.
+
+Frozen confidence-calibration selection values (research/training only; not independent validation):
+- 5m down `P(correct)=0.4750`; 5m up `0.3571`.
+- 15m down `0.6720`; 15m up `0.4091`.
+- 30m down `0.7771`; 30m up `0.3015`.
+- 60m down `0.8790`; 60m up `0.0809`.
+
+Safety and interpretation:
+- The 2026-08-14 H5 and confidence results are selection/training evidence, not independent validation.
+- Production confidence remains unchanged.
+- Production direction logic remains unchanged.
+- Execution remains disabled.
+- Missing IV, Greeks, gamma-flip inputs or dealer positioning must never be fabricated.
+- A research gate passing does not itself authorize production changes or trading.
+
 Next:
-- Historical options/market-data ingestion implementation.
-- SPX/ES synchronization and normalized feature snapshots.
-- Out-of-sample calibration experiments.
-- Flow/liquidity features.
-- FastAPI/streaming endpoints and chart DTOs.
-- Candlestick forecast overlay.
+- Collect the next independent market session with the existing Windows session collector.
+- Evaluate the exact frozen H5 slope-inversion hypothesis without retuning.
+- Evaluate the exact frozen confidence-calibration model using Brier score against both its frozen horizon-only baseline and constant 0.5.
+- Require multiple independent sessions before any shadow-model promotion decision.
+- Continue historical options/market-data ingestion and SPX/ES synchronization.
+- Add flow/liquidity features only through versioned research hypotheses with leakage-safe validation.
+- Continue toward FastAPI/streaming endpoints and chart DTOs after signal/calibration integrity is established.
+- Build the candlestick forecast overlay after the research outputs have stable semantics.
