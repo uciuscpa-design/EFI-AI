@@ -13,6 +13,15 @@ _CHANGE_COLUMNS = (
     "strongest_unsigned_wall",
     "strongest_positive_heuristic_wall",
     "strongest_negative_heuristic_wall",
+    "distance_to_unsigned_wall",
+    "distance_to_positive_wall",
+    "distance_to_negative_wall",
+    "top1_unsigned_gex_concentration",
+    "top5_unsigned_gex_concentration",
+    "median_implied_volatility",
+    "near_iv_skew_put_minus_call",
+    "parity_median_abs_residual",
+    "greeks_solved_pct",
 )
 
 
