@@ -33,6 +33,37 @@ DEFAULT_FEATURES = (
 )
 
 
+# Deliberately avoid monotonic time-of-day state and absolute GEX/GAX levels.
+# This set asks whether *changes* in the hedge surface, relative wall geometry,
+# concentration, and IV/skew changes carry forward-return information.
+STATIONARY_FEATURES = (
+    "backward_return_1m_bps",
+    "d_forward",
+    "d_total_gax_forward_proxy_per_point",
+    "d_total_unsigned_gex_forward_proxy_per_1pct",
+    "d_heuristic_signed_gex_forward_proxy_per_1pct",
+    "unsigned_gex_change_1m_pct",
+    "distance_to_unsigned_wall",
+    "distance_to_positive_wall",
+    "distance_to_negative_wall",
+    "d_distance_to_unsigned_wall",
+    "d_distance_to_positive_wall",
+    "d_distance_to_negative_wall",
+    "d_strongest_unsigned_wall",
+    "d_strongest_positive_heuristic_wall",
+    "d_strongest_negative_heuristic_wall",
+    "top1_unsigned_gex_concentration",
+    "top5_unsigned_gex_concentration",
+    "d_top1_unsigned_gex_concentration",
+    "d_top5_unsigned_gex_concentration",
+    "near_iv_skew_put_minus_call",
+    "d_near_iv_skew_put_minus_call",
+    "d_median_implied_volatility",
+    "d_parity_median_abs_residual",
+    "d_greeks_solved_pct",
+)
+
+
 @dataclass(frozen=True)
 class RegressionMetrics:
     observations: int
@@ -58,11 +89,18 @@ class RidgeFit:
     target_mean: float
     coefficients: np.ndarray
     alpha: float
+    prediction_floor: float | None = None
+    prediction_ceiling: float | None = None
 
     def predict(self, frame: pd.DataFrame) -> np.ndarray:
         values = _feature_matrix(frame, self.features, self.medians)
         standardized = (values - self.means.to_numpy(dtype=float)) / self.scales.to_numpy(dtype=float)
-        return self.target_mean + standardized @ self.coefficients
+        predicted = self.target_mean + standardized @ self.coefficients
+        if self.prediction_floor is not None or self.prediction_ceiling is not None:
+            floor = -np.inf if self.prediction_floor is None else self.prediction_floor
+            ceiling = np.inf if self.prediction_ceiling is None else self.prediction_ceiling
+            predicted = np.clip(predicted, floor, ceiling)
+        return predicted
 
     def standardized_coefficients(self) -> pd.Series:
         return pd.Series(self.coefficients, index=self.features, dtype="float64")
@@ -188,6 +226,88 @@ def fit_ridge(
         target_mean=target_mean,
         coefficients=coefficients,
         alpha=float(alpha),
+    )
+
+
+def fit_stationary_ridge(
+    frame: pd.DataFrame,
+    *,
+    features: tuple[str, ...],
+    target: str,
+    alpha: float = 25.0,
+    prediction_quantile: float = 0.99,
+) -> RidgeFit:
+    """Fit a robust, zero-intercept ridge for short-horizon return research.
+
+    Feature centering/scaling is train-only and robust to outliers.  The return
+    intercept is fixed at zero so an intraday training drift cannot become an
+    unconditional forecast bias.  Predictions are capped to the symmetric
+    train-target absolute quantile to prevent linear extrapolation far beyond
+    returns observed in the training window.
+    """
+    if alpha < 0:
+        raise ValueError("alpha must be nonnegative")
+    if not 0.5 < prediction_quantile <= 1.0:
+        raise ValueError("prediction_quantile must be in (0.5, 1.0]")
+
+    usable_features: list[str] = []
+    medians: dict[str, float] = {}
+    centers: dict[str, float] = {}
+    scales: dict[str, float] = {}
+
+    for feature in features:
+        series = pd.to_numeric(frame[feature], errors="coerce")
+        median_value = float(series.median()) if series.notna().any() else float("nan")
+        if not np.isfinite(median_value):
+            continue
+        filled = series.fillna(median_value)
+        q25 = float(filled.quantile(0.25))
+        q75 = float(filled.quantile(0.75))
+        robust_scale = (q75 - q25) / 1.349
+        if not np.isfinite(robust_scale) or robust_scale <= 1e-12:
+            mad = float((filled - median_value).abs().median())
+            robust_scale = mad * 1.4826
+        if not np.isfinite(robust_scale) or robust_scale <= 1e-12:
+            robust_scale = float(filled.std(ddof=0))
+        if not np.isfinite(robust_scale) or robust_scale <= 1e-12:
+            continue
+        usable_features.append(feature)
+        medians[feature] = median_value
+        centers[feature] = median_value
+        scales[feature] = robust_scale
+
+    if not usable_features:
+        raise ValueError("no nonconstant numeric features remain after robust preprocessing")
+
+    selected = tuple(usable_features)
+    median_series = pd.Series(medians, index=selected, dtype="float64")
+    center_series = pd.Series(centers, index=selected, dtype="float64")
+    scale_series = pd.Series(scales, index=selected, dtype="float64")
+
+    x = _feature_matrix(frame, selected, median_series)
+    x = (x - center_series.to_numpy(dtype=float)) / scale_series.to_numpy(dtype=float)
+    y = pd.to_numeric(frame[target], errors="coerce").to_numpy(dtype=float)
+    if not np.isfinite(y).all():
+        raise ValueError("training target contains missing or non-finite values")
+
+    absolute_bound = float(np.quantile(np.abs(y), prediction_quantile))
+    if not np.isfinite(absolute_bound) or absolute_bound <= 0:
+        absolute_bound = float(np.max(np.abs(y))) if len(y) else 0.0
+    y_fit = np.clip(y, -absolute_bound, absolute_bound) if absolute_bound > 0 else y
+
+    penalty = np.eye(x.shape[1], dtype=float) * float(alpha)
+    coefficients = np.linalg.solve(x.T @ x + penalty, x.T @ y_fit)
+
+    return RidgeFit(
+        features=selected,
+        medians=median_series,
+        means=center_series,
+        scales=scale_series,
+        target_mean=0.0,
+        coefficients=coefficients,
+        alpha=float(alpha),
+        prediction_floor=-absolute_bound if absolute_bound > 0 else None,
+        prediction_ceiling=absolute_bound if absolute_bound > 0 else None,
     )
 
 
