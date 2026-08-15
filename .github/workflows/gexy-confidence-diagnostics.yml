@@ -1,0 +1,32 @@
+name: GEXY Confidence Diagnostics
+
+on:
+  push:
+    branches:
+      - feature/gexy
+    paths:
+      - .github/workflows/gexy-confidence-diagnostics.yml
+      - .gexy-trigger/confidence-diagnostics.txt
+  workflow_dispatch:
+
+jobs:
+  confidence-diagnostics:
+    if: github.actor == 'uciuscpa-design' && github.repository == 'uciuscpa-design/EFI-AI'
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Run confidence diagnostics
+        run: |
+          $repo = 'C:\Users\shannon\Documents\EFI-AI'
+          if (-not (Test-Path $repo)) { throw "EFI-AI repo not found at $repo" }
+          Set-Location $repo
+          $env:PYTHONPATH = $repo
+          git pull --ff-only origin feature/gexy
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts\gexy_confidence_diagnostics.py
+          exit $LASTEXITCODE
