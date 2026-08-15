@@ -219,12 +219,44 @@ Safety and interpretation:
 - Missing IV, Greeks, gamma-flip inputs or dealer positioning must never be fabricated.
 - A research gate passing does not itself authorize production changes or trading.
 
+### Milestone 1 point-in-time SPX/ES infrastructure checkpoint — 2026-08-14
+
+Completed:
+- Audited the live SPX reference semantics and confirmed GEXY's current `spot` is inferred from same-strike call/put option midpoint parity rather than a direct SPX cash tick.
+- Added `ForwardSpotEstimate` and exact selected parity-pair quote timestamp provenance. Acquisition time is now explicitly distinct from the source event times used to construct the inferred SPX value.
+- Frozen the safe SPX synchronization anchor as the **later** quote timestamp of the exact call/put pair required by the selected median parity estimate.
+- Added provider-neutral `MarketObservation` and SPX/reference synchronization infrastructure with a frozen 5-second maximum reference lag, statuses for matched/stale/missing rows, and strict no-future matching.
+- Added nanosecond event-order support. Provider raw nanosecond timestamps remain the source of truth even when Python's human-readable `datetime` projection collapses multiple events into one microsecond.
+- Added a regression test proving a reference event only **1 nanosecond after** the SPX anchor is rejected as future data.
+- Added append-only synchronization journal support and coverage/integrity diagnostics for matched, stale, missing, scoreable fraction, lag mean/max/p95, lookahead violations, provenance flags and raw timestamp consistency.
+- Added an independent journal-integrity test proving a sub-microsecond future reference is detected even when its ISO datetime text is identical to the SPX anchor.
+- Ran a real after-hours Alpaca provenance check. The selected parity pair source timestamps were preserved separately from acquisition time; because the SPX cash session was closed, `scoreable_journaling_allowed=false` and **zero** production, fine-shadow or GAX forecasts were written.
+- Selected **Databento** as the preferred first real ES research source, with Massive retained as a fallback. The research selection is documented in `projects/gexy/research/ES_PROVIDER_SELECTION_V1.md`.
+- Frozen the first Databento research subscription shape as CME Globex `GLBX.MDP3`, `trades`, continuous selector `ES.v.0`, while requiring the actual raw futures contract symbol and instrument ID to be preserved through point-in-time symbol mapping.
+- Added `packages/gexy/databento_es.py`, which normalizes fixed-point trade prices, retains raw `ts_event_ns` and `ts_recv_ns`, preserves raw contract identity, rejects future/mismatched mappings, and converts valid records into provider-neutral `MarketObservation` objects without losing nanosecond order.
+- Added `packages/gexy/databento_preflight.py`, a credential-safe readiness check that never prints a key and performs no network request.
+- Added the dedicated research workflow `.github/workflows/gexy-databento-preflight.yml`.
+- Windows preflight status: `not_configured`; `DATABENTO_API_KEY` is absent, the Databento Python client is not installed, no network request was attempted, and execution/production features remain disabled.
+- Full Windows test suite after nanosecond hardening and Databento readiness scaffolding: **232 passed**, with one unrelated Starlette/httpx deprecation warning.
+
+Point-in-time safety rules now enforced:
+- A synthetic SPX value is not considered known until all quotes required to construct it have occurred.
+- Reference-market observations must satisfy exact event time `<=` the SPX anchor; future nearest-neighbor matching and future interpolation are prohibited.
+- Stale or missing reference rows remain unscoreable rather than being silently filled.
+- Raw provider nanosecond timestamps are preserved when available; microsecond display timestamps cannot override finer event ordering.
+- SPY or another equity proxy must never be stored or described as ES futures.
+- Continuous futures symbology is only a selector; persisted data must retain the actual mapped tradable contract identity.
+- Synchronized ES data, when available, remains a coverage/integrity input only until a separately versioned ES-derived hypothesis passes chronological validation.
+- Production direction, production confidence and execution remain unchanged.
+
 Next:
 - Collect the next independent market session with the existing Windows session collector.
 - Evaluate the exact frozen H5 slope-inversion hypothesis without retuning.
 - Evaluate the exact frozen confidence-calibration model using Brier score against both its frozen horizon-only baseline and constant 0.5.
 - Require multiple independent sessions before any shadow-model promotion decision.
-- Continue historical options/market-data ingestion and SPX/ES synchronization.
+- Provision a Databento account/API key externally, set `DATABENTO_API_KEY` locally without committing it, install the Databento Python client, and run a read-only connectivity/symbol-mapping check.
+- Once Databento connectivity succeeds, collect SPX/ES synchronization rows for coverage/integrity only and require zero lookahead violations before defining any ES-derived predictive feature.
+- Continue historical options/market-data ingestion.
 - Add flow/liquidity features only through versioned research hypotheses with leakage-safe validation.
 - Continue toward FastAPI/streaming endpoints and chart DTOs after signal/calibration integrity is established.
 - Build the candlestick forecast overlay after the research outputs have stable semantics.
