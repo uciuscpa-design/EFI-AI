@@ -67,10 +67,15 @@ def test_main_emits_and_journals_multi_horizon_bundle(monkeypatch, tmp_path, cap
         magnitude=169.9,
         acceleration_bias="up",
     )
+    parity_times = (
+        datetime(2026, 8, 13, 13, 59, 59, 700000, tzinfo=timezone.utc),
+        datetime(2026, 8, 13, 13, 59, 59, 900000, tzinfo=timezone.utc),
+    )
     fake_result = SimpleNamespace(
         timestamp=datetime(2026, 8, 13, 14, 0, tzinfo=timezone.utc),
         spot=7749.2,
-        quote_times=(),
+        quote_times=parity_times,
+        spot_quote_times=parity_times,
         pipeline=SimpleNamespace(
             prediction=forecasts[2],
             multi_horizon=MultiHorizonPrediction(forecasts),
@@ -103,6 +108,13 @@ def test_main_emits_and_journals_multi_horizon_bundle(monkeypatch, tmp_path, cap
     assert set(payload["predictions_by_horizon"]) == {"5", "15", "30", "60"}
     assert payload["fine_shadow_horizons"] == list(range(1, 61))
     assert payload["gax_shadow"]["source"] == "gex_spatial_derivative_proxy_v1"
+    assert payload["spot_provenance"]["method"] == "median_same_strike_call_put_parity_mid"
+    assert payload["spot_provenance"]["parity_pair_quote_times"] == {
+        "count": 2,
+        "min": "2026-08-13T13:59:59.700000+00:00",
+        "max": "2026-08-13T13:59:59.900000+00:00",
+    }
+    assert payload["spot_provenance"]["acquired_at"] == "2026-08-13T14:00:00+00:00"
     assert payload["journaled_forecasts"] == 4
     assert payload["journaled_fine_shadow_forecasts"] == 60
     assert payload["journaled_gax_shadows"] == 4
