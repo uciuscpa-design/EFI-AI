@@ -9,17 +9,38 @@ from pathlib import Path
 import pandas as pd
 
 from packages.core.config import get_settings
-from scripts.gexy_tradeflow_plan import (
-    DATASET,
-    _chain_path,
-    _chain_symbols,
-    _estimate_schema_cost,
-    _filter_chain_by_strike_band,
-    _market_window,
-    _opening_forward,
-    _parse_windows,
-    _window_label,
-)
+
+try:
+    from scripts.gexy_tradeflow_plan import (
+        DATASET,
+        _chain_path,
+        _chain_symbols,
+        _estimate_schema_cost,
+        _filter_chain_by_strike_band,
+        _market_window,
+        _opening_forward,
+        _parse_windows,
+        _window_label,
+    )
+except ModuleNotFoundError as exc:
+    # When this file is launched directly as
+    # `python scripts/gexy_tradeflow_download.py`, Python places the scripts
+    # directory itself on sys.path rather than exposing `scripts` as an
+    # importable package. Fall back to the sibling module in that execution
+    # mode while preserving the package import used by pytest/module callers.
+    if exc.name != "scripts":
+        raise
+    from gexy_tradeflow_plan import (
+        DATASET,
+        _chain_path,
+        _chain_symbols,
+        _estimate_schema_cost,
+        _filter_chain_by_strike_band,
+        _market_window,
+        _opening_forward,
+        _parse_windows,
+        _window_label,
+    )
 
 
 SCHEMA = "tcbbo"
