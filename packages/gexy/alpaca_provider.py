@@ -29,11 +29,30 @@ class AlpacaProviderConfig:
 
 
 @dataclass(frozen=True)
+class ForwardSpotEstimate:
+    """Call/put-parity SPX reference plus timestamps used by the chosen pair."""
+
+    spot: float
+    quote_times: tuple[datetime, ...]
+    expiration_date: str
+    strike: float
+
+    @property
+    def quote_time_min(self) -> datetime | None:
+        return min(self.quote_times) if self.quote_times else None
+
+    @property
+    def quote_time_max(self) -> datetime | None:
+        return max(self.quote_times) if self.quote_times else None
+
+
+@dataclass(frozen=True)
 class ProviderObservation:
     timestamp: datetime
     spot: float
     feature_state: Any
     quote_times: tuple[datetime, ...]
+    spot_quote_times: tuple[datetime, ...] = ()
 
 
 class AlpacaHttpClient:
@@ -128,13 +147,23 @@ def _mid(snapshot: dict[str, Any]) -> float | None:
     return (float(bid) + float(ask)) / 2.0
 
 
-def infer_forward_spot(chain: dict[str, Any], contracts: dict[str, dict[str, Any]]) -> float:
-    """Infer an SPX reference from same-strike call/put parity mids.
+def _quote_timestamp(snapshot: dict[str, Any]) -> datetime | None:
+    quote = snapshot.get("latestQuote") or snapshot.get("latest_quote") or {}
+    raw = quote.get("t", quote.get("timestamp"))
+    return _parse_ts(str(raw)) if raw else None
 
-    With r ~= 0 over short horizons, C-P ~= S-K. The median across matched
-    strikes is much more robust than substituting SPY*10 for SPX.
+
+def infer_forward_spot_with_provenance(
+    chain: dict[str, Any],
+    contracts: dict[str, dict[str, Any]],
+) -> ForwardSpotEstimate:
+    """Infer SPX from same-strike call/put parity and retain pair timestamps.
+
+    The legacy point estimate uses the median parity estimate. Provenance belongs
+    to the exact call/put pair that produced that selected median estimate; other
+    option timestamps must not be represented as if they directly observed spot.
     """
-    paired: dict[tuple[str, float], dict[str, float]] = {}
+    paired: dict[tuple[str, float], dict[str, tuple[float, datetime | None]]] = {}
     for symbol, snap in chain.items():
         meta = contracts.get(symbol)
         if not meta:
@@ -143,15 +172,32 @@ def infer_forward_spot(chain: dict[str, Any], contracts: dict[str, dict[str, Any
         if mid is None:
             continue
         key = (meta["expiration_date"], float(meta["strike_price"]))
-        paired.setdefault(key, {})[meta["type"]] = mid
-    estimates = []
-    for (_, strike), sides in paired.items():
-        if "call" in sides and "put" in sides:
-            estimates.append(strike + sides["call"] - sides["put"])
+        paired.setdefault(key, {})[meta["type"]] = (mid, _quote_timestamp(snap))
+
+    estimates: list[tuple[float, str, float, tuple[datetime, ...]]] = []
+    for (expiration_date, strike), sides in paired.items():
+        if "call" not in sides or "put" not in sides:
+            continue
+        call_mid, call_time = sides["call"]
+        put_mid, put_time = sides["put"]
+        quote_times = tuple(value for value in (call_time, put_time) if value is not None)
+        estimates.append((strike + call_mid - put_mid, expiration_date, strike, quote_times))
+
     if not estimates:
         raise RuntimeError("cannot infer SPX reference: no matched call/put quotes")
-    estimates.sort()
-    return estimates[len(estimates) // 2]
+    estimates.sort(key=lambda row: row[0])
+    spot, expiration_date, strike, quote_times = estimates[len(estimates) // 2]
+    return ForwardSpotEstimate(
+        spot=spot,
+        quote_times=quote_times,
+        expiration_date=expiration_date,
+        strike=strike,
+    )
+
+
+def infer_forward_spot(chain: dict[str, Any], contracts: dict[str, dict[str, Any]]) -> float:
+    """Backward-compatible parity point estimate without discarding new provenance support."""
+    return infer_forward_spot_with_provenance(chain, contracts).spot
 
 
 class AlpacaSpxSnapshotProvider:
@@ -188,7 +234,8 @@ class AlpacaSpxSnapshotProvider:
         contracts = self._contracts(observation_time)
         by_symbol = {row["symbol"]: row for row in contracts}
         chain = self._chain()
-        spot = infer_forward_spot(chain, by_symbol)
+        spot_estimate = infer_forward_spot_with_provenance(chain, by_symbol)
+        spot = spot_estimate.spot
 
         lower = spot - self.config.strike_width
         upper = spot + self.config.strike_width
@@ -248,4 +295,10 @@ class AlpacaSpxSnapshotProvider:
             options=options,
         )
         state = build_feature_state(market)
-        return ProviderObservation(observation_time, spot, state, tuple(quote_times))
+        return ProviderObservation(
+            observation_time,
+            spot,
+            state,
+            tuple(quote_times),
+            spot_estimate.quote_times,
+        )
