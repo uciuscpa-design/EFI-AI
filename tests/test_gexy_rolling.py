@@ -3,7 +3,13 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from packages.gexy.rolling import choose_shrinkage, eligible_history, inner_purged_split
+from packages.gexy.rolling import (
+    DELTA_FEATURE_GROUPS,
+    DELTA_ONLY_FEATURES,
+    choose_shrinkage,
+    eligible_history,
+    inner_purged_split,
+)
 
 
 def _frame(rows: int = 240) -> pd.DataFrame:
@@ -61,3 +67,12 @@ def test_shrinkage_allows_signal_when_validation_improves_materially() -> None:
 
     assert choice.shrinkage > 0.0
     assert choice.validation_mae_bps < choice.zero_mae_bps
+
+
+def test_feature_groups_partition_frozen_delta_only_features() -> None:
+    component_names = tuple(name for name in DELTA_FEATURE_GROUPS if name != "combined")
+    flattened = tuple(feature for name in component_names for feature in DELTA_FEATURE_GROUPS[name])
+
+    assert flattened == DELTA_ONLY_FEATURES
+    assert DELTA_FEATURE_GROUPS["combined"] == DELTA_ONLY_FEATURES
+    assert len(flattened) == len(set(flattened))
