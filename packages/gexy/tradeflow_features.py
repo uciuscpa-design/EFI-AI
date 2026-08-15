@@ -112,10 +112,11 @@ def aggregate_completed_minute_flow(classified: pd.DataFrame) -> pd.DataFrame:
         unknown_premium = float(unknown_group["premium_notional"].sum())
         net_signed_premium = float(group["signed_premium_notional"].sum())
 
+        minute_timestamp = pd.Timestamp(minute).as_unit("ns")
         rows.append(
             {
-                "flow_minute": pd.Timestamp(minute),
-                "timestamp": pd.Timestamp(minute) + pd.Timedelta(minutes=1),
+                "flow_minute": minute_timestamp,
+                "timestamp": minute_timestamp + pd.Timedelta(1, unit="min"),
                 "flow_trade_records": trade_records,
                 "flow_unique_symbols": int(group["symbol"].nunique()),
                 "flow_classified_trade_records": classified_records,
