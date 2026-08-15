@@ -20,7 +20,7 @@ jobs:
       run:
         shell: powershell
     steps:
-      - name: Run confidence diagnostics
+      - name: Run confidence diagnostics and frozen calibration v1
         run: |
           $repo = 'C:\Users\shannon\Documents\EFI-AI'
           if (-not (Test-Path $repo)) { throw "EFI-AI repo not found at $repo" }
@@ -29,4 +29,7 @@ jobs:
           git pull --ff-only origin feature/gexy
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts\gexy_confidence_diagnostics.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host '--- GEXY-CONFIDENCE-CAL-v1 ---'
+          python scripts\gexy_confidence_calibration_v1_report.py
           exit $LASTEXITCODE
