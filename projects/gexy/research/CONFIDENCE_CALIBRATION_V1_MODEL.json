@@ -1,0 +1,133 @@
+{
+  "model_id": "GEXY-CONFIDENCE-CAL-v1",
+  "selection_session": "2026-08-14",
+  "supported_regime": "negative_gamma_acceleration",
+  "supported_horizons_minutes": [5, 15, 30, 60],
+  "supported_directions": ["up", "down"],
+  "smoothing": {
+    "method": "Jeffreys Beta posterior mean",
+    "alpha": 0.5,
+    "beta": 0.5
+  },
+  "minimum_cell_rows": 20,
+  "selection_rows": 634,
+  "fingerprint_sha256": "24b38617e061c18a864c3c871c863504e10a3c146eb81d3c7f4cded93b81cab0",
+  "cells": {
+    "5:down": {
+      "horizon_minutes": 5,
+      "direction": "down",
+      "rows": 99,
+      "hits": 47,
+      "observed_accuracy": 0.47474747474747475,
+      "posterior_probability_correct": 0.475,
+      "minimum_rows_met": true
+    },
+    "5:up": {
+      "horizon_minutes": 5,
+      "direction": "up",
+      "rows": 90,
+      "hits": 32,
+      "observed_accuracy": 0.35555555555555557,
+      "posterior_probability_correct": 0.35714285714285715,
+      "minimum_rows_met": true
+    },
+    "15:down": {
+      "horizon_minutes": 15,
+      "direction": "down",
+      "rows": 92,
+      "hits": 62,
+      "observed_accuracy": 0.6739130434782609,
+      "posterior_probability_correct": 0.6720430107526881,
+      "minimum_rows_met": true
+    },
+    "15:up": {
+      "horizon_minutes": 15,
+      "direction": "up",
+      "rows": 76,
+      "hits": 31,
+      "observed_accuracy": 0.40789473684210525,
+      "posterior_probability_correct": 0.4090909090909091,
+      "minimum_rows_met": true
+    },
+    "30:down": {
+      "horizon_minutes": 30,
+      "direction": "down",
+      "rows": 82,
+      "hits": 64,
+      "observed_accuracy": 0.7804878048780488,
+      "posterior_probability_correct": 0.7771084337349398,
+      "minimum_rows_met": true
+    },
+    "30:up": {
+      "horizon_minutes": 30,
+      "direction": "up",
+      "rows": 67,
+      "hits": 20,
+      "observed_accuracy": 0.29850746268656714,
+      "posterior_probability_correct": 0.3014705882352941,
+      "minimum_rows_met": true
+    },
+    "60:down": {
+      "horizon_minutes": 60,
+      "direction": "down",
+      "rows": 61,
+      "hits": 54,
+      "observed_accuracy": 0.8852459016393442,
+      "posterior_probability_correct": 0.8790322580645161,
+      "minimum_rows_met": true
+    },
+    "60:up": {
+      "horizon_minutes": 60,
+      "direction": "up",
+      "rows": 67,
+      "hits": 5,
+      "observed_accuracy": 0.07462686567164178,
+      "posterior_probability_correct": 0.08088235294117647,
+      "minimum_rows_met": true
+    }
+  },
+  "horizon_only_baselines": {
+    "5": {
+      "rows": 189,
+      "hits": 79,
+      "observed_accuracy": 0.41798941798941797,
+      "posterior_probability_correct": 0.41842105263157897
+    },
+    "15": {
+      "rows": 168,
+      "hits": 93,
+      "observed_accuracy": 0.5535714285714286,
+      "posterior_probability_correct": 0.5532544378698225
+    },
+    "30": {
+      "rows": 149,
+      "hits": 84,
+      "observed_accuracy": 0.5637583892617449,
+      "posterior_probability_correct": 0.5633333333333334
+    },
+    "60": {
+      "rows": 128,
+      "hits": 59,
+      "observed_accuracy": 0.4609375,
+      "posterior_probability_correct": 0.46124031007751937
+    }
+  },
+  "selection_fit_diagnostic": {
+    "note": "Training/selection diagnostic only; not independent validation.",
+    "scored": 634,
+    "observed_accuracy": 0.4968454258675079,
+    "mean_probability_correct": 0.4969214977760846,
+    "calibration_gap": 0.00007607190857666923,
+    "brier": 0.19367685931276718,
+    "horizon_only_brier": 0.24597124081104327,
+    "constant_0_5_brier": 0.25,
+    "brier_improvement_vs_horizon_only": 0.05229438149827609,
+    "brier_improvement_vs_0_5": 0.05632314068723282,
+    "log_loss": 0.5679694797120336
+  },
+  "authorization": {
+    "production_confidence_replacement": false,
+    "production_direction_change": false,
+    "execution": false
+  }
+}
