@@ -77,7 +77,11 @@ def test_stationary_ridge_recovers_simple_change_relationship() -> None:
     )
     metrics = evaluate_predictions(test["forward_return_5m_bps"], model.predict(test))
 
-    assert metrics.correlation is not None and metrics.correlation > 0.99
+    # Train-derived caps intentionally flatten the most extreme extrapolated
+    # values, so correlation need not remain nearly perfect out of sample.
+    # The synthetic relationship should still be strongly monotonic and retain
+    # its direction everywhere.
+    assert metrics.correlation is not None and metrics.correlation > 0.85
     assert metrics.directional_accuracy is not None and metrics.directional_accuracy > 0.95
 
 
