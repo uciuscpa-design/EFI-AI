@@ -11,7 +11,7 @@ from .alpaca_provider import (
     _parse_ts,
     black_scholes_gamma,
     implied_volatility,
-    infer_forward_spot,
+    infer_forward_spot_with_provenance,
 )
 from .live_pipeline import LivePipelineResult, run_live_pipeline
 from .market_adapter import MarketSnapshot, OptionSnapshot
@@ -23,23 +23,25 @@ class AlpacaLiveResult:
     spot: float
     quote_times: tuple[datetime, ...]
     pipeline: LivePipelineResult
+    spot_quote_times: tuple[datetime, ...] = ()
 
 
 def build_alpaca_market_snapshot(
     provider: AlpacaSpxSnapshotProvider,
     *,
     observation_time: datetime | None = None,
-) -> tuple[MarketSnapshot, tuple[datetime, ...]]:
+) -> tuple[MarketSnapshot, tuple[datetime, ...], tuple[datetime, ...]]:
     """Build the exact normalized MarketSnapshot needed by the live predictor.
 
-    This adapter intentionally reuses the provider's acquisition and pricing
-    primitives while preserving strike-level observations for the live pipeline.
+    The returned timestamp groups deliberately distinguish acquisition time from
+    option quote event times and from the exact call/put pair used to infer SPX.
     """
     now = observation_time or datetime.now(timezone.utc)
     contracts = provider._contracts(now)
     by_symbol = {row["symbol"]: row for row in contracts}
     chain = provider._chain()
-    spot = infer_forward_spot(chain, by_symbol)
+    spot_estimate = infer_forward_spot_with_provenance(chain, by_symbol)
+    spot = spot_estimate.spot
 
     lower = spot - provider.config.strike_width
     upper = spot + provider.config.strike_width
@@ -110,7 +112,7 @@ def build_alpaca_market_snapshot(
         iv=(sum(all_ivs) / len(all_ivs)) if all_ivs else None,
         options=options,
     )
-    return snapshot, tuple(quote_times)
+    return snapshot, tuple(quote_times), spot_estimate.quote_times
 
 
 def predict_from_alpaca(
@@ -120,6 +122,15 @@ def predict_from_alpaca(
     observation_time: datetime | None = None,
 ) -> AlpacaLiveResult:
     source = provider or AlpacaSpxSnapshotProvider()
-    snapshot, quote_times = build_alpaca_market_snapshot(source, observation_time=observation_time)
+    snapshot, quote_times, spot_quote_times = build_alpaca_market_snapshot(
+        source,
+        observation_time=observation_time,
+    )
     pipeline = run_live_pipeline(snapshot, horizon_minutes=horizon_minutes)
-    return AlpacaLiveResult(snapshot.timestamp, snapshot.spot, quote_times, pipeline)
+    return AlpacaLiveResult(
+        timestamp=snapshot.timestamp,
+        spot=snapshot.spot,
+        quote_times=quote_times,
+        pipeline=pipeline,
+        spot_quote_times=spot_quote_times,
+    )
