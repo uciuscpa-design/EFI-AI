@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import time as time_module
 from datetime import date, datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -14,6 +15,7 @@ from packages.core.config import get_settings
 
 NY = ZoneInfo("America/New_York")
 DATASET = "OPRA.PILLAR"
+HEARTBEAT_SECONDS = 30.0
 
 
 def _parse_dates(value: str) -> tuple[date, ...]:
@@ -51,6 +53,30 @@ def _quote_cost(client, day: date, chain: pd.DataFrame) -> float:
             end=end.isoformat(),
         )
     )
+
+
+def _run_with_heartbeat(command: list[str], day: date) -> None:
+    """Run one replay child while periodically showing that computation is alive."""
+    started = time_module.monotonic()
+    process = subprocess.Popen(command)
+    try:
+        while True:
+            try:
+                return_code = process.wait(timeout=HEARTBEAT_SECONDS)
+                break
+            except subprocess.TimeoutExpired:
+                elapsed = time_module.monotonic() - started
+                print(
+                    f"{day.isoformat()} REPLAY STILL PROCESSING: "
+                    f"elapsed={elapsed / 60.0:.1f}m pid={process.pid}",
+                    flush=True,
+                )
+    except KeyboardInterrupt:
+        process.terminate()
+        process.wait()
+        raise
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, command)
 
 
 def main() -> None:
@@ -145,11 +171,20 @@ def main() -> None:
         ]
         if quote_path.exists():
             command.extend(["--quotes-csv", str(quote_path)])
-            print(f"\n{day.isoformat()} REPLAYING FROM CACHE: {quote_path}")
+            print(f"\n{day.isoformat()} REPLAYING FROM CACHE: {quote_path}", flush=True)
         else:
-            print(f"\n{day.isoformat()} DOWNLOADING + CACHING CBBO-1m (estimated ${next(row['estimated_new_cbbo_cost'] for row in plan_rows if row['date'] == day.isoformat()):.6f})")
+            estimated_cost = next(
+                row["estimated_new_cbbo_cost"]
+                for row in plan_rows
+                if row["date"] == day.isoformat()
+            )
+            print(
+                f"\n{day.isoformat()} DOWNLOADING + CACHING CBBO-1m "
+                f"(estimated ${estimated_cost:.6f})",
+                flush=True,
+            )
 
-        subprocess.run(command, check=True)
+        _run_with_heartbeat(command, day)
 
     manifest_path = Path("gexy_spxw_multiday_replay_manifest.csv")
     final_rows: list[dict[str, object]] = []
