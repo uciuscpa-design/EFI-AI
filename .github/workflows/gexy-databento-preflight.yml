@@ -1,0 +1,49 @@
+name: GEXY Databento Preflight
+
+on:
+  push:
+    branches:
+      - feature/gexy
+    paths:
+      - .github/workflows/gexy-databento-preflight.yml
+      - .gexy-trigger/databento-preflight.txt
+      - packages/gexy/databento_preflight.py
+      - packages/gexy/databento_es.py
+      - scripts/gexy_databento_preflight.py
+  workflow_dispatch:
+
+jobs:
+  databento-preflight:
+    if: github.actor == 'uciuscpa-design' && github.repository == 'uciuscpa-design/EFI-AI'
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - name: Inspect Databento readiness without network or secret exposure
+        run: |
+          $repo = 'C:\Users\shannon\Documents\EFI-AI'
+          if (-not (Test-Path $repo)) { throw "EFI-AI repo not found at $repo" }
+          Set-Location $repo
+          $env:PYTHONPATH = $repo
+          git pull --ff-only origin feature/gexy
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # Load only DATABENTO_API_KEY if it exists locally. Never print its value.
+          $envFile = Join-Path $repo '.env'
+          if (Test-Path $envFile) {
+            foreach ($line in Get-Content $envFile) {
+              if ($line -match '^DATABENTO_API_KEY=(.*)$') {
+                $env:DATABENTO_API_KEY = $Matches[1].Trim().Trim('"').Trim("'")
+              }
+            }
+          }
+
+          python scripts\gexy_databento_preflight.py
+          $code = $LASTEXITCODE
+          # not_configured/dependency_missing are expected readiness states, not CI failures.
+          if ($code -eq 0 -or $code -eq 1) { exit 0 }
+          exit $code
