@@ -32,6 +32,23 @@ def test_change_features_compute_observation_deltas() -> None:
     assert result.loc[2, "d_total_gax_forward_proxy_per_point"] == pytest.approx(20.0)
     assert result.loc[2, "d_strongest_unsigned_wall"] == pytest.approx(10.0)
     assert result.loc[1, "unsigned_gex_change_1m_pct"] == pytest.approx(2.0)
+    assert result.loc[1, "backward_return_1m_bps"] == pytest.approx(
+        (7777.0 / 7776.0 - 1.0) * 10_000.0
+    )
+    assert "forward_return_1m_bps" not in result.columns
+
+
+def test_future_label_does_not_overwrite_backward_return_feature() -> None:
+    changed = add_change_features(_frame())
+    result = add_forward_horizon_labels(changed, [1])
+
+    assert result.loc[1, "backward_return_1m_bps"] == pytest.approx(
+        (7777.0 / 7776.0 - 1.0) * 10_000.0
+    )
+    assert result.loc[0, "forward_return_1m_bps"] == pytest.approx(
+        (7777.0 / 7776.0 - 1.0) * 10_000.0
+    )
+    assert pd.isna(result.loc[1, "forward_return_1m_bps"])
 
 
 def test_horizon_labels_require_exact_future_clock_minute() -> None:
