@@ -30,6 +30,15 @@ def _paper_key_shape_is_plausible() -> bool:
     return bool(meta["key_present"]) and meta["key_prefix"] == "PK" and int(meta["key_length"]) >= 16
 
 
+def _time_range(values) -> dict[str, object]:
+    rows = tuple(values)
+    return {
+        "count": len(rows),
+        "min": min(rows).isoformat() if rows else None,
+        "max": max(rows).isoformat() if rows else None,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run one live GEXY SPX prediction from Alpaca data")
     parser.add_argument("--horizon", type=int, default=30, help="primary forecast horizon in minutes")
@@ -145,6 +154,14 @@ def main() -> int:
         "status": "ok",
         "timestamp": result.timestamp.isoformat(),
         "spot": result.spot,
+        "spot_provenance": {
+            "method": "median_same_strike_call_put_parity_mid",
+            "source": "alpaca_options_chain",
+            "acquired_at": result.timestamp.isoformat(),
+            "parity_pair_quote_times": _time_range(result.spot_quote_times),
+            "usable_option_quote_times": _time_range(result.quote_times),
+            "point_in_time_sync_note": "SPX spot is inferred from the selected parity pair; acquisition time is not represented as the spot event timestamp.",
+        },
         "prediction": asdict(result.pipeline.prediction),
         "predictions_by_horizon": {
             str(prediction.horizon_minutes): asdict(prediction)
