@@ -123,6 +123,14 @@ def test_diagnostic_confirms_mechanical_upper_cap_saturation(tmp_path):
     assert overall["raw_score"]["min"] > RAW_UPPER_CAP_THRESHOLD
     assert overall["raw_score"]["fraction_at_or_above_upper_cap_threshold"] == 1.0
     assert overall["components"]["median_slope_share_of_structure"] > 0.999
+    assert overall["predicted_counts"] == {"up": 4, "down": 4, "flat": 0}
+    assert overall["by_predicted_direction"]["up"]["rows"] == 4
+    assert overall["by_predicted_direction"]["down"]["rows"] == 4
+    assert sum(bucket["rows"] for bucket in overall["accuracy_by_raw_quartile"]) == 8
+    assert sum(
+        bucket["predicted_counts"]["up"] + bucket["predicted_counts"]["down"]
+        for bucket in overall["accuracy_by_raw_quartile"]
+    ) == 8
     assert report["production_predictor_changed"] is False
     assert report["execution_authorized"] is False
 
@@ -167,3 +175,6 @@ def test_diagnostic_does_not_claim_saturation_for_small_structure(tmp_path):
     assert overall["saturation_confirmed"] is False
     assert overall["reported_confidence"]["upper_cap_fraction"] == 0.0
     assert overall["raw_score"]["fraction_at_or_above_upper_cap_threshold"] == 0.0
+    assert overall["predicted_counts"] == {"up": 0, "down": 4, "flat": 0}
+    assert overall["by_predicted_direction"]["down"]["rows"] == 4
+    assert overall["by_predicted_direction"]["up"]["status"] == "no_rows"
