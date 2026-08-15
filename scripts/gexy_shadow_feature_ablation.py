@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
+from packages.gexy.log_text import read_log_text
 from packages.gexy.shadow_feature_ablation import build_shadow_feature_ablation
 
 
@@ -20,10 +22,20 @@ def main() -> int:
     args = parser.parse_args()
 
     log_paths = sorted(Path().glob(args.log_glob))
-    report = build_shadow_feature_ablation(
-        journal_path=args.journal,
-        log_paths=log_paths,
-    )
+    with TemporaryDirectory(prefix="gexy-feature-ablation-") as temp_dir:
+        normalized_paths: list[Path] = []
+        for index, source in enumerate(log_paths):
+            destination = Path(temp_dir) / f"{index:03d}-{source.name}"
+            destination.write_text(read_log_text(source), encoding="utf-8")
+            normalized_paths.append(destination)
+
+        report = build_shadow_feature_ablation(
+            journal_path=args.journal,
+            log_paths=normalized_paths,
+        )
+
+    report["log_paths"] = [str(path) for path in log_paths]
+    report["log_encoding_normalized"] = True
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0 if report["status"] == "ok" else 2
 
