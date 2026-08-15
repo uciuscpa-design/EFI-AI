@@ -38,6 +38,23 @@ def test_eligible_history_uses_only_labels_known_before_prediction() -> None:
     assert pd.to_datetime(history["timestamp"], utc=True).max() + pd.Timedelta(minutes=30) < prediction_time
 
 
+def test_eligible_history_allows_only_matured_same_day_labels() -> None:
+    frame = _frame(120)
+    prediction_time = pd.Timestamp("2026-08-13T15:01:00Z")
+    history = eligible_history(
+        frame,
+        prediction_time=prediction_time,
+        horizon_minutes=30,
+        max_rows=180,
+    )
+
+    timestamps = pd.to_datetime(history["timestamp"], utc=True)
+    assert not history.empty
+    assert timestamps.max() == pd.Timestamp("2026-08-13T14:30:00Z")
+    assert (timestamps + pd.Timedelta(minutes=30) < prediction_time).all()
+    assert pd.Timestamp("2026-08-13T14:31:00Z") not in set(timestamps)
+
+
 def test_inner_split_purges_overlap_with_validation() -> None:
     history = _frame(180)
     split = inner_purged_split(
