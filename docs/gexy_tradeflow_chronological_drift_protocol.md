@@ -111,6 +111,22 @@ This characterization is strictly **local-only / $0**. It reads only existing lo
 
 No new feature search, alternate horizon, alternate window, state descriptor, classifier, or holdout inspection is authorized.
 
+## Implementation checkpoint
+
+The protocol above was frozen before implementation.
+
+Dedicated characterization script:
+
+- `scripts/gexy_tradeflow_chronological_drift.py`
+- implementation commit: `b44ea248a4ee46952d59cf1342922d8f882cade1`
+
+Safeguards:
+
+- `tests/test_gexy_tradeflow_chronological_drift.py`
+- safeguard commit: `0b6c6514ce35dfb7c3ebff902e8b5ed4842df52b`
+
+The implementation hard-codes the 17 chronological seen dates and the three excluded holdout dates, recomputes the unchanged 90%-coverage opening Endpoint B from existing local feature files, reuses the already-frozen strict stability classification, fixes the rolling window at five sessions, and performs only the diagnostics listed above. It contains no market-data client and no predictor-selection logic.
+
 ## Scientific limits
 
 All 17 sessions are already-seen development data. The calendar-month split is explicitly post-hoc. The sample is short and contiguous, so temporal clustering may reflect transient market conditions rather than a persistent mechanism.
