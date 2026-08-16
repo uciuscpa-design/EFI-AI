@@ -157,14 +157,38 @@ Local output:
 
 Quality note: all 30 completed opening-window flow minutes matched cached replay state exactly. The builder reported that forward-return label values were written to the local feature CSV but not displayed. No Endpoint B was inspected or adjudicated.
 
+### 2026-07-20 — complete
+
+Executed local-only command:
+
+```powershell
+uv run --with pandas python scripts/gexy_tradeflow_features.py --date 2026-07-20 --windows 09:30-10:00
+```
+
+Observed preparation summary:
+
+| Metric | Value |
+|---|---:|
+| Completed flow minutes | 30 |
+| Replay-matched minutes | 30 |
+| Replay match pct | 100.0% |
+| Frozen flow features | 19 |
+| Causal alignment | minute M flow timestamped M+1 |
+| Terminal forward-return labels | hidden |
+
+Local output:
+
+- `data/gexy/tradeflow/gexy_spxw_2026-07-20_tradeflow_minute_features.csv`
+
+Quality note: all 30 completed opening-window flow minutes matched cached replay state exactly. The builder reported that forward-return label values were written to the local feature CSV but not displayed. No Endpoint B was inspected or adjudicated.
+
 ### Remaining Stage 4B work
 
-- 2026-07-20: causal minute tradeflow feature build pending.
 - 2026-07-17: causal minute tradeflow feature build pending.
 
 ## Next frozen preparation steps
 
-1. complete Stage 4B causal minute tradeflow features for 2026-07-20 and 2026-07-17;
+1. complete Stage 4B causal minute tradeflow features for 2026-07-17;
 2. build Black76 Greek-weighted hedge proxy features using the frozen hedge sign convention;
 3. verify the frozen Greek-volume coverage requirement, including the 90% coverage floor;
 4. only after all preparation checks pass, run the dedicated holdout reveal.
