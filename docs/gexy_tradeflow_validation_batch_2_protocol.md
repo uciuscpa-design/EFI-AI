@@ -102,6 +102,18 @@ The immediate pre-download re-price remained **$3.903763**, within the frozen **
 
 Both unchanged 160-symbol windows were cached successfully. The batch remains committed to continue in the frozen order with 2026-08-10 and then 2026-08-07 before any batch-2 signal result is inspected. No early stopping is permitted based on intermediate results.
 
+### Acquisition record — 2026-08-10
+
+The second batch-2 date was purchased on 2026-08-15 before any 2026-08-10 trade-flow classification, Greek weighting, feature scoring, or endpoint analysis was performed.
+
+The immediate pre-download re-price remained **$3.305874**, within the frozen **$3.35** operational cap:
+
+- 09:30-10:00 America/New_York: $1.551260
+- 15:30-16:00 America/New_York: $1.754614
+- total pre-download estimate: **$3.305874**
+
+Both unchanged 160-symbol windows were cached successfully. No 2026-08-11 or 2026-08-10 batch-2 signal result has been inspected. The batch remains committed to purchase the final frozen date, 2026-08-07, before any batch-2 extraction, Greek weighting, feature scoring, or endpoint analysis. No early stopping is permitted based on intermediate results.
+
 ## Interpretation rule
 
 - Same negative sign across additional days strengthens evidence of stability.
