@@ -20,10 +20,19 @@ SESSION_CLOSE = time(16, 0)
 
 
 def _parse_dates(value: str) -> tuple[date, ...]:
-    days = tuple(sorted({date.fromisoformat(item.strip()) for item in value.split(",") if item.strip()}))
+    days: list[date] = []
+    seen: set[date] = set()
+    for item in value.split(","):
+        raw = item.strip()
+        if not raw:
+            continue
+        day = date.fromisoformat(raw)
+        if day not in seen:
+            seen.add(day)
+            days.append(day)
     if not days:
         raise argparse.ArgumentTypeError("--dates must contain at least one ISO date")
-    return days
+    return tuple(days)
 
 
 def _parse_clock(value: str) -> time:
