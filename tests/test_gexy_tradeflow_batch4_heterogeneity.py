@@ -33,7 +33,7 @@ def test_ols_rank_r2_exact_linear_fit() -> None:
     x = np.arange(1, 8, dtype=float).reshape(-1, 1)
     y = 2.0 * x[:, 0] + 3.0
     residual, r2 = _ols_residual(y, x)
-    assert r2 == 1.0
+    assert np.isclose(r2, 1.0, atol=1e-12)
     assert np.max(np.abs(residual)) < 1e-10
 
 
