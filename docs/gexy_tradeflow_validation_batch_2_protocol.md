@@ -90,6 +90,18 @@ Reviewed operational caps are:
 
 The downloader's independent absolute safety ceiling remains **$5.00 per invocation**. If a date re-prices above its reviewed operational cap, refuse that download and record a new budget review before changing the cap. Such a budget exception must not change the frozen data scope or primary endpoints.
 
+### Acquisition record — 2026-08-11
+
+The first batch-2 date was purchased on 2026-08-15 before any 2026-08-11 trade-flow classification, Greek weighting, feature scoring, or endpoint analysis was performed.
+
+The immediate pre-download re-price remained **$3.903763**, within the frozen **$3.95** operational cap:
+
+- 09:30-10:00 America/New_York: $1.895586
+- 15:30-16:00 America/New_York: $2.008177
+- total pre-download estimate: **$3.903763**
+
+Both unchanged 160-symbol windows were cached successfully. The batch remains committed to continue in the frozen order with 2026-08-10 and then 2026-08-07 before any batch-2 signal result is inspected. No early stopping is permitted based on intermediate results.
+
 ## Interpretation rule
 
 - Same negative sign across additional days strengthens evidence of stability.
