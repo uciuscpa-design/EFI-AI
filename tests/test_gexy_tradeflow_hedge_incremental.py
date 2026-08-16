@@ -14,7 +14,7 @@ def test_partial_spearman_removes_relationship_explained_by_momentum() -> None:
     n, value = partial_spearman(signal, target, pd.DataFrame({"momentum": momentum}))
 
     assert n == 20
-    assert abs(value) < 1e-10
+    assert np.isnan(value)
 
 
 def test_incremental_score_keeps_hedge_information_beyond_momentum_and_raw() -> None:
