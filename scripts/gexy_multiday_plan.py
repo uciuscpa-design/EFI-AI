@@ -18,14 +18,18 @@ PARENT = f"{ROOT}.OPT"
 
 def _parse_dates(value: str) -> tuple[date, ...]:
     items: list[date] = []
+    seen: set[date] = set()
     for raw in value.split(","):
         raw = raw.strip()
-        if raw:
-            items.append(date.fromisoformat(raw))
-    unique = tuple(sorted(set(items)))
-    if not unique:
+        if not raw:
+            continue
+        parsed = date.fromisoformat(raw)
+        if parsed not in seen:
+            items.append(parsed)
+            seen.add(parsed)
+    if not items:
         raise argparse.ArgumentTypeError("--dates must contain at least one ISO date")
-    return unique
+    return tuple(items)
 
 
 def _chain_path(day: date) -> Path:
