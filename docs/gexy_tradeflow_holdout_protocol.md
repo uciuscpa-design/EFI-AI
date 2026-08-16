@@ -95,3 +95,13 @@ Before purchasing the 2026-08-13 TCBBO holdout, run the metadata-only dry-run wi
 The frozen 2026-08-13 holdout dry-run was completed before any holdout TCBBO was downloaded or inspected. The exact estimate was **$4.002663** for the unchanged two-window, +/-200-point, 160-symbol request: $2.365129 for 09:30-10:00 and $1.637533 for 15:30-16:00.
 
 This exceeds the original requested $4.00 cap by **$0.002663** (about 0.0666%). Narrowing the windows, strike band, or symbol set solely to fit the original cap would change the pre-specified holdout sample. After review, the holdout data specification and all statistical hypotheses remain unchanged; only the operational requested execution cap is raised to **$4.05** for this one holdout download. The downloader's independent **$5.00 hard safety ceiling** remains unchanged, and the exact cost must still be re-checked immediately before download. If the re-priced request exceeds $4.05, the download must be refused and reviewed again.
+
+### Holdout acquisition record — 2026-08-15
+
+The 2026-08-13 holdout TCBBO was purchased only after the reviewed cap exception above was committed. The pre-download cost recheck remained **$4.002663**, within the one-time **$4.05** operational cap. Both frozen windows were downloaded successfully with the unchanged 160-symbol selection:
+
+- 09:30-10:00 America/New_York: estimated cost $2.365129
+- 15:30-16:00 America/New_York: estimated cost $1.637533
+- total pre-download estimate: **$4.002663**
+
+No holdout trade-flow classification, Greek weighting, feature scoring, or endpoint result had been inspected before acquisition. From this point forward, the holdout must be processed only with the frozen pipeline and reporting rules above; no classifier, feature, coverage, horizon, or signal-definition changes are permitted in response to the 2026-08-13 results.
