@@ -128,7 +128,8 @@ def main() -> None:
             "Characterize frozen GEXY opening 15m heterogeneity across exactly 17 already-seen dates. "
             "Uses the existing leave-one-minute-out audit math, creates no predictor, reads no reserved "
             "holdout date, and makes no market-data request."
-        )
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
     args = parser.parse_args()
