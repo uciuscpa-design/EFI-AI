@@ -58,6 +58,35 @@ def test_session_state_frozen_date_sets_are_exact() -> None:
     )
 
 
+def test_session_state_opening_sample_preserves_raw_volume_denominator() -> None:
+    from scripts.gexy_tradeflow_session_state_development import _opening_sample
+
+    timestamps = pd.to_datetime(
+        ["2026-07-24T13:31:00Z", "2026-07-24T13:32:00Z"], utc=True
+    )
+    raw = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "flow_net_signed_contracts": [3.0, -2.0],
+            "flow_classified_contract_volume": [10.0, 20.0],
+        }
+    )
+    hedge = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "replay_match": [True, True],
+            "hedge_greek_solved_contract_volume_pct": [0.95, 0.96],
+            "hedge_delta_units": [1.0, -1.0],
+            "forward_return_15m_bps": [2.0, -3.0],
+        }
+    )
+
+    sample = _opening_sample(raw, hedge)
+
+    assert list(sample["flow_classified_contract_volume"]) == [10.0, 20.0]
+    assert list(sample["flow_net_signed_contracts"]) == [3.0, -2.0]
+
+
 def test_session_state_selects_at_most_one_highest_abs_eligible_candidate() -> None:
     from scripts.gexy_tradeflow_session_state_development import _select_candidate
 
