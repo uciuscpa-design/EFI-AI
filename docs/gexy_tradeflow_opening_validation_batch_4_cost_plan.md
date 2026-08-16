@@ -99,11 +99,11 @@ After all replay caches were complete, the trade-flow planner was run in metadat
 
 This scope is fixed from cached opening forwards and the pre-specified +/-200 strike band. The pricing script uses Databento metadata cost estimation only and did not expose or inspect any batch-4 trade-flow endpoint.
 
-## Reviewed paid TCBBO caps
+## Reviewed paid TCBBO caps and completed acquisition
 
 The existing `scripts/gexy_tradeflow_download.py` remains per-date and fail-closed: dry-run unless `--execute` is supplied, exact re-pricing immediately before a paid request, refusal to overwrite existing outputs, atomic `.partial` to final-file replacement, and a hard local ceiling of $5.00 per invocation.
 
-To preserve the frozen acquisition order and keep each request tightly bounded, the reviewed per-date preflight-estimate caps are:
+The reviewed per-date preflight-estimate caps were:
 
 | Date | Current estimate | Reviewed cap | Estimate headroom |
 |---|---:|---:|---:|
@@ -111,10 +111,18 @@ To preserve the frozen acquisition order and keep each request tightly bounded, 
 | 2026-07-31 | $2.521779 | **$2.60** | $0.078221 |
 | 2026-07-30 | $2.105496 | **$2.18** | $0.074504 |
 
-The sum of the reviewed per-date caps is **$7.23** versus the current three-date estimate of $7.008959. Each paid request is authorized only if its immediate pre-download re-price is at or below that date's cap. If any date exceeds its cap, stop before download and do not raise or substitute the cap without a new recorded review.
+Acquisition completed in the frozen order **2026-08-03 -> 2026-07-31 -> 2026-07-30** with no endpoint extraction or inspection between dates. Every immediate pre-download re-price matched the earlier estimate exactly and remained under its reviewed cap:
 
-Acquisition must remain in frozen order: **2026-08-03 -> 2026-07-31 -> 2026-07-30**. No batch-4 endpoint may be extracted, inspected, or analyzed until all authorized TCBBO acquisitions are complete. This authorization covers only the 09:30-10:00 opening TCBBO files under the fixed +/-200 scope; it does not authorize closing-window data or any scope expansion.
+| Date | Immediate pre-download re-price | Reviewed cap | Raw TCBBO output |
+|---|---:|---:|---|
+| 2026-08-03 | $2.381683 | $2.45 | `data/gexy/tradeflow/gexy_spxw_2026-08-03_0930_1000_tcbbo.dbn.zst` |
+| 2026-07-31 | $2.521779 | $2.60 | `data/gexy/tradeflow/gexy_spxw_2026-07-31_0930_1000_tcbbo.dbn.zst` |
+| 2026-07-30 | $2.105496 | $2.18 | `data/gexy/tradeflow/gexy_spxw_2026-07-30_0930_1000_tcbbo.dbn.zst` |
 
-The cumulative upstream plus current TCBBO preflight estimate is **$7.245478** ($0.236519 prior upstream estimate + $7.008959 TCBBO estimate). This remains an estimate-based research budget record, not a statement of final vendor billing.
+**Total immediate pre-download TCBBO estimate used across the three completed acquisitions: $7.008959.** The sum of the reviewed caps was $7.23; no cap increase or scope change was needed.
 
-No batch-4 endpoint has been inspected.
+The acquisition phase is now closed. No additional market-data purchase is required for the frozen Batch-4 endpoint evaluation. All remaining extraction, feature construction, quality checks, and validation must use the existing local caches only.
+
+The cumulative authorized pre-download estimates for Batch 4 are **$0.134623 metadata + $0.101896 CBBO + $7.008959 TCBBO = $7.245478**. This remains an estimate-based research budget record, not a statement of final vendor billing.
+
+No batch-4 endpoint has yet been inspected.
