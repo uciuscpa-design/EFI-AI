@@ -117,14 +117,26 @@ The scientifically defensible conclusion is not that the signal is dead, nor tha
 
 OPRA does not identify customer/dealer inventory or executed underlying dealer hedge trades. `hedge_delta_units` remains an opposite-side liquidity-provider hedge proxy derived from quote-based aggressor inference and Black-76 Greeks. Correlation and partial correlation do not establish causality.
 
+## Post-validation heterogeneity audit — completed
+
+A separate local-only audit was frozen after the Batch-4 result and before any additional Batch-4 heterogeneity diagnostic was run. Its detailed record is `docs/gexy_tradeflow_batch4_heterogeneity_audit_result.md`.
+
+The audit sharpens the Batch-4 interpretation without changing the official endpoint results:
+
+- **2026-07-31 ordinary positive is broad within the 29-observation sample.** All 29 leave-one-minute-out ordinary estimates remain positive, ranging from +0.195950 to +0.360153. The largest absolute ordinary rank-product contribution accounts for 10.41% of total absolute contribution and the top three account for 29.00%. The sign reversal is therefore not a one-minute artifact under the frozen diagnostics.
+- **2026-08-03 ordinary negative is robust, but its positive two-control residual is sign-fragile.** All 29 ordinary leave-one-out estimates remain negative, while one of 29 controlled leave-one-out estimates becomes negative. The two controls explain 48.19% of ranked hedge variation on this day, supporting a control-sensitive residualization description without proving classical multicollinearity or a market mechanism.
+- **2026-07-30 ordinary negative is robust, while the two-control residual is near zero and fragile.** All 29 ordinary leave-one-out estimates remain negative, but only 21 of 29 controlled estimates remain negative.
+
+The audit therefore strengthens the conclusion that session heterogeneity is real and that the historical two-control residual is less sign-stable in Batch 4 than the ordinary association. It does not validate the ordinary endpoint, because 2026-07-31 remains a broad positive untouched failure.
+
 ## Research consequence
 
 Do not change the sign convention, aggressor classifier, strike band, 90% coverage floor, or 15-minute horizon in response to Batch 4.
 
-Do not discard or relabel 2026-07-31. It is a substantive untouched failure of the ordinary negative-sign candidate.
+Do not discard or relabel 2026-07-31. It is a substantive untouched failure of the ordinary negative-sign candidate, and the heterogeneity audit indicates that its positive sign is broad within the small opening sample rather than driven by a single minute.
 
-Do not let Endpoint B rescue the failed historical Endpoint A.
+Do not let Endpoint B rescue the failed historical Endpoint A, and do not replace Endpoint A retroactively.
 
-Before purchasing more TCBBO, perform a **local-only Batch-4 heterogeneity audit** that is explicitly diagnostic rather than signal-selective. The next audit should compare the three Batch-4 sessions on already-frozen observables and control structure, with particular attention to why 2026-07-31 reverses the ordinary association and why 2026-08-03 changes sign only after residualization. No new horizon, window, strike band, classifier, coverage threshold, or signal decomposition should be introduced in that audit.
+Do not mine the Batch-4 dates for a new regime classifier. Any next untouched validation batch must be frozen separately before acquisition and must explicitly acknowledge both facts now established descriptively: ordinary negative association can be stable on some sessions, and it can reverse broadly positive on another high-quality session.
 
-Any later untouched validation batch must be frozen separately before acquisition and must preserve the Batch-4 failures in the cumulative research record.
+No further TCBBO purchase should occur until that next untouched protocol and its budget discipline are frozen.
