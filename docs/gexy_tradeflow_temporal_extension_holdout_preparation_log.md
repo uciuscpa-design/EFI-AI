@@ -88,17 +88,52 @@ Local outputs:
 
 Quality note: chain matching is 100%. The 19.9833% UNKNOWN-trade share is preserved by design rather than reassigned. This extraction is a preparation artifact only and does not reveal Endpoint B.
 
-### Remaining Stage 4A work
+### 2026-07-17 — complete
 
-- 2026-07-17: extraction pending.
+Executed local-only command:
+
+```powershell
+uv run --with databento --with pandas python scripts/gexy_tradeflow_extract.py --date 2026-07-17 --windows 09:30-10:00 --strike-band-points 200
+```
+
+Observed extraction summary:
+
+| Metric | Value |
+|---|---:|
+| Records | 150,242 |
+| Unique symbols | 153 |
+| Chain matches | 150,242 |
+| Chain match pct | 1.000000 |
+| Buy trades | 54,510 |
+| Sell trades | 64,920 |
+| Unknown trades | 30,812 |
+| Unknown trade pct | 0.205082 |
+| Contract volume | 428,852 |
+| Buy contract volume | 142,369 |
+| Sell contract volume | 197,381 |
+| Unknown contract volume | 89,102 |
+| Net signed contracts | -55,012 |
+| Gross premium notional | $414,093,201 |
+| Net signed premium notional | $4,541,906 |
+| Opening forward | 7449.975000 |
+
+Local outputs:
+
+- `data/gexy/tradeflow/gexy_spxw_2026-07-17_0930_1000_tcbbo_classified.csv`
+- `data/gexy/tradeflow/gexy_spxw_2026-07-17_tcbbo_summary.csv`
+
+Quality note: chain matching is 100%. The 20.5082% UNKNOWN-trade share is preserved by design rather than reassigned. This extraction is a preparation artifact only and does not reveal Endpoint B.
+
+### Stage 4A status — complete
+
+All three reserved temporal-extension holdout dates have completed local TCBBO extraction and frozen aggressor classification. Each date achieved 100% chain matching. UNKNOWN observations remain unforced under the frozen classifier.
 
 ## Next frozen preparation steps
 
-1. complete local TCBBO extraction for 2026-07-17;
-2. build the frozen tradeflow feature layer from the classified files;
-3. build Black76 Greek-weighted hedge proxy features using the frozen hedge sign convention;
-4. verify the frozen Greek-volume coverage requirement, including the 90% coverage floor;
-5. only after all preparation checks pass, run the dedicated holdout reveal.
+1. build the frozen tradeflow feature layer from the three classified files;
+2. build Black76 Greek-weighted hedge proxy features using the frozen hedge sign convention;
+3. verify the frozen Greek-volume coverage requirement, including the 90% coverage floor;
+4. only after all preparation checks pass, run the dedicated holdout reveal.
 
 ## Scientific guardrails
 
