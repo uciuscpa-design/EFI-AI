@@ -13,6 +13,7 @@ from packages.gexy.tradeflow_hedge import (
     build_symbol_minute_greeks,
     join_hedge_flow_to_replay,
 )
+from packages.gexy.tradeflow_hedge_quality import aggregate_greek_volume_coverage
 
 try:
     from scripts.gexy_tradeflow_plan import _parse_windows, _window_label
@@ -117,6 +118,13 @@ def main() -> None:
         symbol_greeks = build_symbol_minute_greeks(classified, replay)
         weighted = apply_dealer_hedge_proxy(classified, symbol_greeks)
         minute = aggregate_hedge_flow_minutes(weighted)
+        coverage = aggregate_greek_volume_coverage(weighted)
+        minute = minute.merge(
+            coverage,
+            on=["flow_minute", "timestamp"],
+            how="left",
+            validate="one_to_one",
+        )
         combined = join_hedge_flow_to_replay(
             minute,
             replay,
@@ -132,15 +140,22 @@ def main() -> None:
     solved = int(symbol_greeks["greek_solved"].sum())
     symbol_minutes = len(symbol_greeks)
     matched = int(combined["replay_match"].sum())
+    volume_coverage = pd.to_numeric(
+        combined.loc[combined["replay_match"], "hedge_greek_solved_contract_volume_pct"],
+        errors="coerce",
+    )
 
     print("GEXY GREEK-WEIGHTED TRADE-FLOW HEDGE PROXIES")
     print(f"DATE: {args.trading_day.isoformat()}")
     print(f"INPUT WINDOWS: {','.join(_window_label(item) for item in args.windows)}")
     print(f"SYMBOL-MINUTE GREEK SNAPSHOTS: {symbol_minutes}")
     print(f"GREEKS SOLVED: {solved}/{symbol_minutes} ({solved / symbol_minutes:.1%})" if symbol_minutes else "GREEKS SOLVED: 0/0")
+    if volume_coverage.notna().any():
+        print(f"MEDIAN CLASSIFIED VOLUME WITH GREEKS: {volume_coverage.median():.1%}")
+        print(f"MIN CLASSIFIED VOLUME WITH GREEKS: {volume_coverage.min():.1%}")
     print(f"COMPLETED HEDGE-FLOW MINUTES: {len(combined)}")
     print(f"REPLAY-MATCHED AVAILABILITY MINUTES: {matched}/{len(combined)}")
-    print(f"HEDGE FEATURES: {len(HEDGE_FLOW_FEATURES)}")
+    print(f"HEDGE FEATURES: {len(HEDGE_FLOW_FEATURES)} core + 2 Greek-volume quality fields")
     print("CAUSALITY: minute-M quotes/flow/state are combined only into features timestamped M+1")
     print("SIGN: positive hedge_delta_units = opposite-side liquidity-provider proxy buys index-equivalent hedge")
     print("SIGN: positive hedge_gamma_units_per_point = customer option buying / opposite-side short-gamma acceleration")
@@ -151,6 +166,7 @@ def main() -> None:
         "flow_minute",
         "timestamp",
         "hedge_greek_solved_pct",
+        "hedge_greek_solved_contract_volume_pct",
         "hedge_delta_units",
         "hedge_delta_notional",
         "hedge_gamma_units_per_point",
