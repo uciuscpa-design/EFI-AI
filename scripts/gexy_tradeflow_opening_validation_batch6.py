@@ -187,7 +187,7 @@ def main() -> None:
             "Evaluate the frozen GEXY Batch-6 opening-window heterogeneity replication from local feature CSVs. "
             "This validator is 15m only: Endpoint A is the historical momentum+raw partial Spearman; "
             "Endpoint B is the ordinary hedge/return heterogeneity endpoint. No alternate horizon, regime split, "
-            "or market-data request is made."
+            "and no market-data request is made."
         )
     )
     parser.add_argument("--dates", required=True, type=_parse_dates)
