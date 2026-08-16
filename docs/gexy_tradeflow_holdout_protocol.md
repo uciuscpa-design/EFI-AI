@@ -89,3 +89,9 @@ Do not select a different signal because it performs better on the holdout.
 ## Spend guardrail
 
 Before purchasing the 2026-08-13 TCBBO holdout, run the metadata-only dry-run with the same bounded windows and +/-200 strike band. Keep the requested execution cap at **$4.00**. If the exact re-priced holdout estimate exceeds $4.00, do not raise the cap automatically; review or narrow the request first.
+
+### Pre-download reviewed exception — 2026-08-15
+
+The frozen 2026-08-13 holdout dry-run was completed before any holdout TCBBO was downloaded or inspected. The exact estimate was **$4.002663** for the unchanged two-window, +/-200-point, 160-symbol request: $2.365129 for 09:30-10:00 and $1.637533 for 15:30-16:00.
+
+This exceeds the original requested $4.00 cap by **$0.002663** (about 0.0666%). Narrowing the windows, strike band, or symbol set solely to fit the original cap would change the pre-specified holdout sample. After review, the holdout data specification and all statistical hypotheses remain unchanged; only the operational requested execution cap is raised to **$4.05** for this one holdout download. The downloader's independent **$5.00 hard safety ceiling** remains unchanged, and the exact cost must still be re-checked immediately before download. If the re-priced request exceeds $4.05, the download must be refused and reviewed again.
