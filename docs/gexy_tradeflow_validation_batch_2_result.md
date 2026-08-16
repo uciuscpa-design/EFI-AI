@@ -54,16 +54,20 @@ The initial negative 5-minute relationship does **not** generalize across the fi
 
 The 15-minute endpoint is substantially more stable day-by-day than the 5-minute endpoint. Four of five days are negative and the lone positive day, 2026-08-11, is small (+0.022534). With only five days this is still insufficient for a claim of statistical reliability or production edge.
 
-## Post-holdout non-overlapping sensitivity — implementation caveat
+## Corrected post-holdout non-overlapping sensitivity
 
-The first five-day run reported:
+Code review after the first five-day run found that the pooling implementation controlled for a single ordinal `day_index` rather than true categorical day fixed effects. That implementation was corrected before interpreting the pooled result further. The day-by-day primary endpoints above were unaffected.
 
-- 5m: 50 observations, pooled partial Spearman -0.179678
-- 15m: 10 observations, pooled partial Spearman +0.146693
+After re-running the same five local sessions with true categorical day fixed effects:
 
-However, code review after this output found that the pooling implementation controlled for a single ordinal `day_index` rather than true day fixed effects. A single ordinal day variable removes only a linear trend across ordered days and does not fully partial out arbitrary session-level differences. Therefore these pooled sensitivity values must be treated as provisional and re-run after correcting the day-control implementation.
+- 5m: 50 deterministic non-overlapping observations across 5 days; partial Spearman controlling momentum, raw flow, and day fixed effects = **-0.183525**.
+- 15m: 10 deterministic non-overlapping observations across 5 days; corresponding partial Spearman = **+0.381954**.
 
-This implementation issue does **not** affect the day-by-day primary endpoint values or their sign-stability summary above.
+Interpretation:
+
+- The 5-minute non-overlapping sensitivity remains modestly negative even though the full-minute day-by-day endpoint is not sign-stable. This suggests any 5-minute structure is not a simple universal day-level effect.
+- The 15-minute non-overlapping pooled estimate changes sign relative to the 4/5 negative day-level result. With only 10 controlled observations, this is too small to overturn the day-by-day evidence, but it is strong evidence that the 15-minute association is not uniform across the sampled intraday minutes/windows.
+- Neither pooled sensitivity should be promoted to a primary result; both are post-holdout diagnostics with small effective sample sizes.
 
 ## Current verdict
 
@@ -75,10 +79,11 @@ Supported:
 Not supported:
 
 - A universal negative 5-minute endpoint; batch 2 reverses/collapses it on all three new dates.
+- A uniform 15-minute effect across all intraday observations; the corrected non-overlap sensitivity is opposite-signed and very small-sample.
 - A claim that either horizon is statistically established with only five sessions.
 - Causality from dealer hedging to SPX movement.
 - A production trading edge.
 
 ## Next rule
 
-Do not buy more TCBBO yet. First correct the pooled non-overlap day-control implementation and re-run the existing five-day local data. Then investigate regime/time-window dependence using the already purchased sessions, clearly labeling any such work as post-batch exploratory analysis. Do not tune the aggressor classifier, reverse the hedge sign convention, or silently redefine the original primary endpoints.
+Do not buy more TCBBO yet. Use the already purchased five sessions for explicitly post-batch exploratory analysis of time-window/regime dependence while keeping the original endpoint definition unchanged. The first exploratory split should be the two pre-existing acquisition windows (09:30-10:00 and 15:30-16:00 America/New_York), because this tests whether the contradictory pooled 15-minute result is concentrated by time of day without inventing a new signal. Do not tune the aggressor classifier, reverse the hedge sign convention, or silently redefine the original primary endpoints. Any newly proposed conditional rule must be frozen and validated on later untouched data before being called out-of-sample.
