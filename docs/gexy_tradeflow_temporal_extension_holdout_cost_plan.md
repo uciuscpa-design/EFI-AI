@@ -80,7 +80,7 @@ The replay-generated state/features remain preparation artifacts only. Do not in
 
 ## Stage 3 — opening TCBBO tradeflow
 
-Opening TCBBO acquisition remains **not yet authorized**.
+All three opening TCBBO requests have now been dry-run priced. No Stage-3 paid TCBBO download has yet been executed.
 
 The exact frozen Stage-3 scope is:
 
@@ -94,25 +94,30 @@ The exact frozen Stage-3 scope is:
 
 The fail-closed downloader `scripts/gexy_tradeflow_download.py` prices the exact request without downloading when `--execute` is omitted. It re-prices the exact request immediately before any paid download, rejects any estimate above the explicit cap, refuses to overwrite existing TCBBO files, and has a hard absolute $5 ceiling.
 
-### Dry-run estimates
+### Dry-run estimates and frozen per-date caps
 
-| Date | Opening forward | Exact symbols | Opening TCBBO estimate | Status |
-|---|---:|---:|---:|---|
-| 2026-07-21 | 7481.846627 | 160 | $1.988368 | dry run only; no download |
-| 2026-07-20 | 7501.515003 | 160 | $2.240789 | dry run only; no download |
-| 2026-07-17 | pending | pending | pending | not yet priced |
+| Date | Opening forward | Exact symbols | Opening TCBBO estimate | Frozen paid cap | Status |
+|---|---:|---:|---:|---:|---|
+| 2026-07-21 | 7481.846627 | 160 | $1.988368 | $2.00 | dry run only; no download |
+| 2026-07-20 | 7501.515003 | 160 | $2.240789 | $2.25 | dry run only; no download |
+| 2026-07-17 | 7449.975000 | 160 | $2.352253 | $2.36 | dry run only; no download |
 
-The 2026-07-21 and 2026-07-20 dry runs used exactly the frozen 09:30-10:00 window and ±200-point strike band. Each successful downloader run explicitly reported `DRY RUN ONLY: no market data downloaded`. An earlier duplicated 2026-07-20 command failed argument parsing at `--max-cost` and therefore did not price or download data.
+Exact estimated Stage-3 TCBBO total: **$6.581410**.
 
-The first 2026-07-17 dry-run attempt was also duplicated on one PowerShell line, so `--max-cost` was parsed as the invalid value `5uv`. Argument parsing failed before any pricing request or market-data download; 2026-07-17 remains pending.
+Sum of frozen per-date paid caps: **$6.61**. These are independent fail-closed guards, not a blanket authorization to spend. Each paid request must still be explicitly executed by the user one date at a time; if the immediate pre-download re-price exceeds that date's frozen cap, the request must abort.
+
+Estimated cumulative Stage-1 + Stage-2 + Stage-3 data cost, if all three Stage-3 requests re-price at the current estimates and are executed: **$6.823070**.
+
+The 2026-07-21, 2026-07-20, and 2026-07-17 dry runs all used exactly the frozen 09:30-10:00 window and ±200-point strike band. Each successful downloader run explicitly reported `DRY RUN ONLY: no market data downloaded`.
+
+Earlier duplicated PowerShell commands for 2026-07-20 and 2026-07-17 failed argument parsing before pricing or downloading and therefore had no paid market-data effect.
 
 Next steps:
 
-1. price 2026-07-17 using the same frozen dry-run scope;
-2. record all three exact per-date estimates;
-3. freeze separate reviewed TCBBO caps before any paid TCBBO request;
-4. acquire/extract/build tradeflow features without revealing the holdout Endpoint B;
-5. run the dedicated frozen holdout reveal only after all preparation is complete.
+1. execute the three paid opening-TCBBO requests one date at a time using only the frozen per-date caps above, with immediate re-pricing and fail-closed abort over cap;
+2. extract/build tradeflow and Greek-hedge features without revealing the holdout Endpoint B;
+3. verify frozen preparation/coverage requirements;
+4. run the dedicated frozen holdout reveal only after all preparation is complete.
 
 ## Scientific and cost limits
 
