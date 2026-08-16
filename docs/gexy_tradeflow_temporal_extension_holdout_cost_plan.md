@@ -99,19 +99,18 @@ The fail-closed downloader `scripts/gexy_tradeflow_download.py` prices the exact
 | Date | Opening forward | Exact symbols | Opening TCBBO estimate | Status |
 |---|---:|---:|---:|---|
 | 2026-07-21 | 7481.846627 | 160 | $1.988368 | dry run only; no download |
-| 2026-07-20 | pending | pending | pending | not yet priced |
+| 2026-07-20 | 7501.515003 | 160 | $2.240789 | dry run only; no download |
 | 2026-07-17 | pending | pending | pending | not yet priced |
 
-The 2026-07-21 dry run used exactly the frozen 09:30-10:00 window and ±200-point strike band. The downloader explicitly reported `DRY RUN ONLY: no market data downloaded`.
+The 2026-07-21 and 2026-07-20 dry runs used exactly the frozen 09:30-10:00 window and ±200-point strike band. Each successful downloader run explicitly reported `DRY RUN ONLY: no market data downloaded`. An earlier duplicated 2026-07-20 command failed argument parsing at `--max-cost` and therefore did not price or download data.
 
 Next steps:
 
-1. price 2026-07-20 using the same frozen dry-run scope;
-2. price 2026-07-17 using the same frozen dry-run scope;
-3. record all three exact per-date estimates;
-4. freeze separate reviewed TCBBO caps before any paid TCBBO request;
-5. acquire/extract/build tradeflow features without revealing the holdout Endpoint B;
-6. run the dedicated frozen holdout reveal only after all preparation is complete.
+1. price 2026-07-17 using the same frozen dry-run scope;
+2. record all three exact per-date estimates;
+3. freeze separate reviewed TCBBO caps before any paid TCBBO request;
+4. acquire/extract/build tradeflow features without revealing the holdout Endpoint B;
+5. run the dedicated frozen holdout reveal only after all preparation is complete.
 
 ## Scientific and cost limits
 
