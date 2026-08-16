@@ -25,6 +25,19 @@ def _directional_accuracy(signal: np.ndarray, target: np.ndarray) -> float | Non
     return float(np.mean(np.sign(signal[mask]) == np.sign(target[mask])))
 
 
+def _spearman_rank_corr(x: pd.Series, y: pd.Series) -> float:
+    """Compute Spearman correlation without requiring SciPy.
+
+    Spearman correlation is Pearson correlation of the rank-transformed values.
+    pandas' Series.corr(method="spearman") delegates to scipy.stats, which makes
+    SciPy an unnecessary runtime dependency for this lightweight diagnostic.
+    Average ranks preserve the standard tie-handling convention.
+    """
+    x_rank = x.rank(method="average")
+    y_rank = y.rank(method="average")
+    return float(x_rank.corr(y_rank, method="pearson"))
+
+
 def _bucket_means(signal: pd.Series, target: pd.Series) -> tuple[float | None, float | None, int, int]:
     finite = pd.DataFrame({"signal": signal, "target": target}).replace([np.inf, -np.inf], np.nan).dropna()
     if len(finite) < 8 or finite["signal"].nunique() < 4:
@@ -79,7 +92,7 @@ def score_flow_signals(
                 spearman = float("nan")
             else:
                 pearson = float(x.corr(y, method="pearson"))
-                spearman = float(x.corr(y, method="spearman"))
+                spearman = _spearman_rank_corr(x, y)
 
             low_mean, high_mean, low_n, high_n = _bucket_means(x, y)
             direction = _directional_accuracy(
