@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from packages.gexy.tradeflow_multiday_validation import (
     fixed_clock_nonoverlap_sample,
+    pooled_nonoverlap_primary,
     summarize_primary_days,
 )
 
@@ -53,3 +55,36 @@ def test_fixed_clock_nonoverlap_sample_uses_deterministic_horizon_grid() -> None
     )
 
     assert result["timestamp"].dt.minute.tolist() == [35, 40, 45]
+
+
+def test_pooled_nonoverlap_uses_categorical_day_fixed_effects() -> None:
+    frames: list[tuple[str, pd.DataFrame, pd.DataFrame]] = []
+    day_levels = [0.0, 10.0, 0.0]
+    target_levels = [0.0, 20.0, 0.0]
+
+    for day_offset, (signal_level, target_level) in enumerate(zip(day_levels, target_levels, strict=True)):
+        day = pd.Timestamp("2026-08-07T13:35:00Z") + pd.Timedelta(days=day_offset)
+        timestamps = pd.date_range(day, periods=3, freq="5min")
+        raw = pd.DataFrame(
+            {
+                "timestamp": timestamps,
+                "flow_net_signed_contracts": [0.0, 0.0, 0.0],
+            }
+        )
+        hedge = pd.DataFrame(
+            {
+                "timestamp": timestamps,
+                "replay_match": True,
+                "hedge_greek_solved_contract_volume_pct": 1.0,
+                "hedge_delta_units": [signal_level] * 3,
+                "backward_return_1m_bps": [0.0, 0.0, 0.0],
+                "forward_return_5m_bps": [target_level] * 3,
+            }
+        )
+        frames.append((day.date().isoformat(), raw, hedge))
+
+    result = pooled_nonoverlap_primary(frames, horizons_minutes=(5,), min_volume_coverage=0.90)
+
+    assert len(result) == 1
+    assert result.iloc[0]["observations"] == 9
+    assert np.isnan(result.iloc[0]["partial_spearman_controlling_momentum_raw_and_day"])
