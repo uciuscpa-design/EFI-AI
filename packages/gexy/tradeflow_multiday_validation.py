@@ -99,6 +99,20 @@ def fixed_clock_nonoverlap_sample(
     return sample.loc[keep].copy().reset_index(drop=True)
 
 
+def _day_fixed_effect_controls(pooled: pd.DataFrame) -> pd.DataFrame:
+    """Return momentum/raw controls plus true categorical day fixed effects."""
+    controls = pooled[[MOMENTUM_SIGNAL, PRIMARY_RAW_SIGNAL]].copy()
+    day_dummies = pd.get_dummies(
+        pooled["trading_day"].astype(str),
+        prefix="day",
+        drop_first=True,
+        dtype=float,
+    )
+    if not day_dummies.empty:
+        controls = pd.concat([controls.reset_index(drop=True), day_dummies.reset_index(drop=True)], axis=1)
+    return controls
+
+
 def pooled_nonoverlap_primary(
     daily_frames: Iterable[tuple[str, pd.DataFrame, pd.DataFrame]],
     *,
@@ -108,15 +122,15 @@ def pooled_nonoverlap_primary(
     """Pool deterministic non-overlapping rows and partial out day membership.
 
     Controls are the completed flow-minute SPX return, raw net signed contracts,
-    and an ordinal day indicator. The day control prevents level differences
-    between sessions from being mistaken for within-session signal association.
+    and categorical day fixed effects. The day dummies remove arbitrary session
+    level differences rather than assuming a linear trend across ordered days.
     """
     materialized = list(daily_frames)
     rows: list[dict[str, object]] = []
     for raw_horizon in horizons_minutes:
         horizon = int(raw_horizon)
         pieces: list[pd.DataFrame] = []
-        for day_index, (trading_day, raw, hedge) in enumerate(materialized):
+        for trading_day, raw, hedge in materialized:
             sample = fixed_clock_nonoverlap_sample(
                 raw,
                 hedge,
@@ -127,7 +141,6 @@ def pooled_nonoverlap_primary(
                 continue
             sample = sample.copy()
             sample["trading_day"] = str(trading_day)
-            sample["day_index"] = float(day_index)
             pieces.append(sample)
         if not pieces:
             continue
@@ -138,14 +151,15 @@ def pooled_nonoverlap_primary(
             PRIMARY_RAW_SIGNAL,
             MOMENTUM_SIGNAL,
             target_column,
-            "day_index",
+            "trading_day",
         }
         if not required.issubset(pooled.columns):
             continue
+        controls = _day_fixed_effect_controls(pooled)
         observations, partial = partial_spearman(
             pooled[PRIMARY_HEDGE_SIGNAL],
             pooled[target_column],
-            pooled[[MOMENTUM_SIGNAL, PRIMARY_RAW_SIGNAL, "day_index"]],
+            controls,
         )
         rows.append(
             {
