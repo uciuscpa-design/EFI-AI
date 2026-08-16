@@ -120,16 +120,38 @@ This strengthens the broader conclusion that the relationship is session-depende
 
 The previously inspected 8/8 ordinary-negative research pattern remains historically important but cannot be treated as out-of-sample evidence. Batch 4 prospectively produced 2/3 negative, including a broad positive reversal on 2026-07-31; Batch 5 now prospectively produces only 1/3 negative, with 2026-07-28 positive and 2026-07-29 essentially zero.
 
+## Completed post-validation heterogeneity audit
+
+A separately frozen local-only heterogeneity audit was run after the official Batch-5 result was permanently recorded. The audit did not alter any official endpoint and made no paid data request.
+
+Key ordinary leave-one-minute-out findings:
+
+- **2026-07-28:** all 29 leave-one-out estimates remained positive, range +0.037767 to +0.217843; largest single absolute contribution share 11.70%.
+- **2026-07-27:** all 29 leave-one-out estimates remained negative, range -0.297756 to -0.133552; largest single absolute contribution share 9.32%.
+- **2026-07-29:** 15/29 leave-one-out estimates were negative and 14/29 positive, with a median of -0.004379 and range -0.062397 to +0.073892.
+
+The two-control endpoint showed the same broad positive/broad negative contrast on July 28 versus July 27, while July 29 remained sign-fragile.
+
+The audit therefore sharpens the heterogeneity conclusion:
+
+- July 28 is a **broad positive** session, not a one-minute artifact;
+- July 27 is a **broad negative** session, not a one-minute artifact;
+- July 29 is **genuinely near zero and sign-fragile**, and should not be assigned a directional sign.
+
+Combined with Batch 4, the unchanged construction has now produced broad positive, broad negative, and near-zero opening sessions. This is stronger evidence for a heterogeneous/session-dependent process and against a universal or consistently dominant sign.
+
+Detailed audit record: `docs/gexy_tradeflow_batch5_heterogeneity_audit_result.md`.
+
 ## Scientific limits
 
 Do not change the sign convention, aggressor classifier, strike band, coverage floor, horizon, or window to improve this result.
 
 Do not discard 2026-07-28 or relabel 2026-07-29 as negative. Do not let the negative 2026-07-27 session rescue the batch.
 
-`hedge_delta_units` remains an opposite-side liquidity-provider/dealer-hedge proxy inferred from OPRA trade price versus pre-trade NBBO and Black-76 Greeks. OPRA does not identify customer/dealer inventory or executed underlying hedge trades. Correlation, partial correlation, sign stability, and any later influence diagnostic do not establish causality or a production trading edge.
+`hedge_delta_units` remains an opposite-side liquidity-provider/dealer-hedge proxy inferred from OPRA trade price versus pre-trade NBBO and Black-76 Greeks. OPRA does not identify customer/dealer inventory or executed underlying hedge trades. Correlation, partial correlation, sign stability, and influence diagnostics do not establish causality or a production trading edge.
 
 ## Next research rule
 
-Do not immediately buy another batch to chase the same negative-sign hypothesis.
+Do not tune a regime classifier on Batches 4-5 and do not chase the old universal negative-sign hypothesis.
 
-First perform only local, post-validation diagnostics under a separately frozen protocol to determine whether the substantive 2026-07-28 positive ordinary result is broad or influence-sensitive and whether the near-zero 2026-07-29 result is intrinsically unstable. Those diagnostics must not create a new regime filter or alter the official Batch-5 endpoints.
+If another untouched batch is acquired, freeze it before pricing and use it as a **three-state heterogeneity replication** under the unchanged construction: broad positive, broad negative, or near-zero. Preserve Endpoint A for historical continuity and Endpoint B as the primary descriptive sign/stability endpoint, but do not assume either sign in advance as universal.
