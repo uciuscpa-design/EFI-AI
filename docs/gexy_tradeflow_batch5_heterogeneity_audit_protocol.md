@@ -140,3 +140,14 @@ The official Batch-5 result remains fixed regardless of this audit. No row may b
 ## Cost rule
 
 This audit is strictly local-only and must make no market-data request. No new Databento purchase is authorized by this protocol.
+
+## Implementation checkpoint
+
+The Batch-5-specific audit CLI was created after this protocol was frozen and before any diagnostic output was run:
+
+- script: `scripts/gexy_tradeflow_batch5_heterogeneity_audit.py`
+- implementation commit: `5b21d92b482ff65b159d1db926cfc3989fab0385`
+- CLI/order safeguard test: `tests/test_gexy_tradeflow_batch5_heterogeneity_audit_cli.py`
+- test commit: `ca93b3c346833f59151341c913ff63f7d010673b`
+
+The CLI reuses the already-tested rank residualization / leave-one-out / contribution-concentration implementation from the Batch-4 audit, but writes a Batch-5-specific output CSV and labels all terminal output as Batch 5. It makes no market-data request and does not alter any official Batch-5 endpoint.
