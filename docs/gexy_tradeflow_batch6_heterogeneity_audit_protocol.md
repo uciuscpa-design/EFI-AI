@@ -124,6 +124,19 @@ For controlled results, the same stability language may be used, but the histori
 
 High control `R^2` or moderate/high pairwise correlations may support a residualization-sensitivity description, but the audit must not claim proven classical multicollinearity or market mechanism without a separately justified test.
 
+## Frozen implementation checkpoint
+
+The diagnostic implementation was added only after this protocol was first committed:
+
+- audit CLI: `scripts/gexy_tradeflow_batch6_heterogeneity_audit.py`
+- audit CLI commit: `0258947d7a435731ababa0fcc29f7604ccfaca8b`
+- CLI/order safeguard: `tests/test_gexy_tradeflow_batch6_heterogeneity_audit_cli.py`
+- safeguard commit: `5bf99566561356230bd312b960895922f634b9bd`
+
+The Batch-6 wrapper imports the already-existing `audit_day` implementation from `packages/gexy/tradeflow_batch4_heterogeneity.py`, preserving the same calculations used for the prior Batch-4 and Batch-5 audits. It writes a Batch-6-specific CSV and does not overwrite earlier audit outputs.
+
+No Batch-6 audit result had been run or inspected when this implementation checkpoint was recorded.
+
 ## Scientific limits
 
 The official Batch-6 result remains fixed regardless of this audit. No row may be deleted, relabeled, or used to recompute the official Batch-6 endpoint values. No new regime classifier may be selected from these three days.
