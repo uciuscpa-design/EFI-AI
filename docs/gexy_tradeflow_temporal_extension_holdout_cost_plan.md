@@ -94,11 +94,21 @@ The exact frozen Stage-3 scope is:
 
 The fail-closed downloader `scripts/gexy_tradeflow_download.py` prices the exact request without downloading when `--execute` is omitted. It re-prices the exact request immediately before any paid download, rejects any estimate above the explicit cap, refuses to overwrite existing TCBBO files, and has a hard absolute $5 ceiling.
 
-After Stage-2 success:
+### Dry-run estimates
 
-1. retain the cached CBBO/replay state locally;
-2. price the exact frozen opening-window TCBBO scope for all three holdout dates using dry-run metadata planning only;
-3. record the exact per-date estimates;
+| Date | Opening forward | Exact symbols | Opening TCBBO estimate | Status |
+|---|---:|---:|---:|---|
+| 2026-07-21 | 7481.846627 | 160 | $1.988368 | dry run only; no download |
+| 2026-07-20 | pending | pending | pending | not yet priced |
+| 2026-07-17 | pending | pending | pending | not yet priced |
+
+The 2026-07-21 dry run used exactly the frozen 09:30-10:00 window and ±200-point strike band. The downloader explicitly reported `DRY RUN ONLY: no market data downloaded`.
+
+Next steps:
+
+1. price 2026-07-20 using the same frozen dry-run scope;
+2. price 2026-07-17 using the same frozen dry-run scope;
+3. record all three exact per-date estimates;
 4. freeze separate reviewed TCBBO caps before any paid TCBBO request;
 5. acquire/extract/build tradeflow features without revealing the holdout Endpoint B;
 6. run the dedicated frozen holdout reveal only after all preparation is complete.
