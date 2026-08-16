@@ -52,14 +52,49 @@ Local outputs:
 
 Quality note: chain matching is 100%. The 19.7543% UNKNOWN-trade share is preserved by design rather than reassigned. This extraction is a preparation artifact only and does not reveal Endpoint B.
 
+### 2026-07-20 — complete
+
+Executed local-only command:
+
+```powershell
+uv run --with databento --with pandas python scripts/gexy_tradeflow_extract.py --date 2026-07-20 --windows 09:30-10:00 --strike-band-points 200
+```
+
+Observed extraction summary:
+
+| Metric | Value |
+|---|---:|
+| Records | 142,204 |
+| Unique symbols | 136 |
+| Chain matches | 142,204 |
+| Chain match pct | 1.000000 |
+| Buy trades | 50,604 |
+| Sell trades | 63,183 |
+| Unknown trades | 28,417 |
+| Unknown trade pct | 0.199833 |
+| Contract volume | 399,199 |
+| Buy contract volume | 130,198 |
+| Sell contract volume | 196,557 |
+| Unknown contract volume | 72,444 |
+| Net signed contracts | -66,359 |
+| Gross premium notional | $263,469,897 |
+| Net signed premium notional | -$7,931,051 |
+| Opening forward | 7501.515003 |
+
+Local outputs:
+
+- `data/gexy/tradeflow/gexy_spxw_2026-07-20_0930_1000_tcbbo_classified.csv`
+- `data/gexy/tradeflow/gexy_spxw_2026-07-20_tcbbo_summary.csv`
+
+Quality note: chain matching is 100%. The 19.9833% UNKNOWN-trade share is preserved by design rather than reassigned. This extraction is a preparation artifact only and does not reveal Endpoint B.
+
 ### Remaining Stage 4A work
 
-- 2026-07-20: extraction pending.
 - 2026-07-17: extraction pending.
 
 ## Next frozen preparation steps
 
-1. complete local TCBBO extraction for 2026-07-20 and 2026-07-17;
+1. complete local TCBBO extraction for 2026-07-17;
 2. build the frozen tradeflow feature layer from the classified files;
 3. build Black76 Greek-weighted hedge proxy features using the frozen hedge sign convention;
 4. verify the frozen Greek-volume coverage requirement, including the 90% coverage floor;
