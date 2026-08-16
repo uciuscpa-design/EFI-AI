@@ -56,10 +56,6 @@ Once the chains existed, the same run metadata-priced the exact-symbol full-day 
 
 **Estimated full-day CBBO-1m total: $0.101896.**
 
-The combined metadata estimate plus priced-but-not-yet-downloaded CBBO estimate is $0.236519, but only the $0.134623 chain-input stage has been executed so far.
-
-Opening-only +/-200 TCBBO pricing remains pending until replay features exist so the opening forward can be determined under the frozen selection rule.
-
 ## CBBO replay safety change and fresh no-download preflight
 
 Before any CBBO purchase, `scripts/gexy_multiday_replay.py` was hardened to preserve first-seen date order, default `--max-new-cbbo-cost` to $0.00, and re-price every missing CBBO day immediately before the paid batch. If the re-priced total exceeds the explicit cap, the script aborts before download. The local regression test for the replay planner passed before the fresh preflight.
@@ -74,12 +70,25 @@ A fresh no-download replay preflight was then run in the frozen order and return
 
 **Fresh estimated new CBBO total: $0.101896.** The displayed cost guard was $0.000000 and the script exited with `NO MARKET DATA DOWNLOADED`, confirming fail-closed behavior.
 
-## Reviewed paid CBBO cap
+## Reviewed paid CBBO cap and completed replay acquisition
 
-The reviewed Batch-4 full-day exact-symbol CBBO-1m cap is **$0.12 total** for the frozen three-date invocation. This provides $0.018104 of estimate headroom over the fresh $0.101896 preflight.
+The reviewed Batch-4 full-day exact-symbol CBBO-1m cap was **$0.12 total** for the frozen three-date invocation, providing $0.018104 of estimate headroom over the fresh $0.101896 preflight.
 
-The paid CBBO replay acquisition is authorized only if the immediate pre-download re-priced total is at or below $0.12. If it exceeds $0.12, the script must abort before download and no higher cap should be substituted without a new recorded review.
+Immediately before the paid acquisition, the missing CBBO scope was re-priced at **$0.101896**, below the $0.12 guard. Acquisition then completed for all three frozen dates and produced the corresponding full-day CBBO cache and replay feature CSV for each date. The final multi-day replay summary reported:
 
-This authorization covers only the exact-symbol full-day CBBO-1m data needed to generate the replay caches for 2026-08-03, 2026-07-31, and 2026-07-30. It does **not** authorize opening-window TCBBO or any other market-data purchase.
+- dates completed: 3
+- re-priced new CBBO estimate used for guard: **$0.101896**
+- manifest: `gexy_spxw_multiday_replay_manifest.csv`
+- all three replay sessions were generated before any opening-window TCBBO endpoint data were acquired or inspected.
+
+For 2026-07-30, the terminal output additionally showed 389 replay minutes, no low-parity-pair skips, median Greeks solved 237 / 80.3%, first forward 7377.481 and last forward 7438.882. These replay diagnostics are upstream state construction and do not expose the batch-4 trade-flow endpoint.
+
+The cumulative pre-download estimates used for authorized Batch-4 upstream acquisition so far are **$0.134623 metadata + $0.101896 CBBO = $0.236519**. This is a sum of local preflight estimates, not a claim about final vendor billing.
+
+## Next stage: opening-only bounded TCBBO pricing
+
+The replay caches now provide the frozen opening-forward anchor needed to select SPXW 0DTE contracts within +/-200 SPX points. The next permitted operation is metadata-only pricing of **TCBBO**, **09:30-10:00 America/New_York only**, **opening-forward +/-200 points**, for the same three frozen dates.
+
+No opening TCBBO purchase is authorized by this document yet. The bounded TCBBO total must be priced and reviewed separately before any paid TCBBO command.
 
 No batch-4 endpoint has been inspected.
