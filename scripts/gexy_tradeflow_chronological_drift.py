@@ -6,10 +6,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from packages.gexy.tradeflow_batch4_heterogeneity import audit_day, frozen_opening_sample
-from scripts.gexy_tradeflow_cumulative_heterogeneity_characterization import (
-    _classify,
-    _ordinary_loo_values,
+from packages.gexy.tradeflow_batch4_heterogeneity import (
+    HEDGE,
+    TARGET,
+    _spearman as _endpoint_spearman,
+    audit_day,
+    frozen_opening_sample,
 )
 
 
@@ -44,6 +46,31 @@ def _raw_path(data_dir: Path, day: str) -> Path:
 
 def _hedge_path(data_dir: Path, day: str) -> Path:
     return data_dir / f"gexy_spxw_{day}_tradeflow_hedge_features.csv"
+
+
+def _ordinary_loo_values(sample: pd.DataFrame) -> np.ndarray:
+    values: list[float] = []
+    for index in range(len(sample)):
+        subset = sample.drop(index=index).reset_index(drop=True)
+        value = _endpoint_spearman(subset[HEDGE], subset[TARGET])
+        if np.isfinite(value):
+            values.append(float(value))
+    return np.asarray(values, dtype=float)
+
+
+def _classify(full_value: float, loo: np.ndarray) -> tuple[str, int, float]:
+    if not np.isfinite(full_value) or full_value == 0 or len(loo) == 0:
+        return "sign_fragile", 0, float("nan")
+    sign = int(np.sign(full_value))
+    loo_signs = np.sign(loo).astype(int)
+    same_count = int(np.sum(loo_signs == sign))
+    same_pct = float(same_count / len(loo))
+    strict = bool(np.all(loo_signs == sign))
+    if strict and sign > 0:
+        return "strict_sign_stable_positive", same_count, same_pct
+    if strict and sign < 0:
+        return "strict_sign_stable_negative", same_count, same_pct
+    return "sign_fragile", same_count, same_pct
 
 
 def _spearman(x: pd.Series, y: pd.Series) -> float:
