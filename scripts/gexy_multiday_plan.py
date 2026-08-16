@@ -59,6 +59,12 @@ def _statistics_cost(client, day: date) -> float:
     )
 
 
+def _metadata_cost(client, day: date) -> tuple[float, float, float]:
+    definition_cost = _definition_cost(client, day)
+    statistics_cost = _statistics_cost(client, day)
+    return definition_cost, statistics_cost, definition_cost + statistics_cost
+
+
 def _cbbo_cost(client, day: date, chain: pd.DataFrame) -> float:
     symbols = chain["raw_symbol"].dropna().astype(str).unique().tolist()
     if not symbols:
@@ -119,13 +125,26 @@ def main() -> None:
         description=(
             "Plan a multi-session SPXW 0DTE Databento expansion. By default this only prices "
             "definition/statistics requests and prices exact-symbol CBBO when a local chain CSV "
-            "already exists. Use --build-missing-chains to download only the small daily "
-            "definition/OI inputs, save chains, and then price exact-symbol CBBO for every day."
+            "already exists. Use --build-missing-chains only with an explicit "
+            "--max-metadata-download-cost; all missing-chain metadata is re-priced and checked "
+            "against that fail-closed guard before any definition/OI download begins."
         )
     )
     parser.add_argument("--dates", required=True, type=_parse_dates)
     parser.add_argument("--build-missing-chains", action="store_true")
+    parser.add_argument(
+        "--max-metadata-download-cost",
+        type=float,
+        default=0.0,
+        help=(
+            "Maximum total estimated definition+OI download cost allowed for missing chains. "
+            "Default 0.0 makes --build-missing-chains fail closed until a reviewed cap is explicit."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.max_metadata_download_cost < 0:
+        raise SystemExit("--max-metadata-download-cost must be nonnegative")
 
     settings = get_settings()
     if not settings.databento_api_key:
@@ -140,58 +159,92 @@ def main() -> None:
 
     client = db.Historical(settings.databento_api_key)
 
-    total_metadata_cost = 0.0
-    total_cbbo_cost = 0.0
-    cbbo_priced_days = 0
     rows: list[dict[str, object]] = []
+    row_by_day: dict[date, dict[str, object]] = {}
+    missing_days: list[date] = []
 
     for day in args.dates:
-        definition_cost = _definition_cost(client, day)
-        statistics_cost = _statistics_cost(client, day)
-        metadata_cost = definition_cost + statistics_cost
-        total_metadata_cost += metadata_cost
-
+        definition_cost, statistics_cost, metadata_cost = _metadata_cost(client, day)
         path = _chain_path(day)
         chain: pd.DataFrame | None = None
         chain_status = "cached" if path.exists() else "missing"
 
         if path.exists():
             chain = pd.read_csv(path)
-        elif args.build_missing_chains:
-            print(
-                f"{day.isoformat()} metadata estimated cost before chain build: "
-                f"${metadata_cost:.6f}"
-            )
-            chain = _build_chain(client, db, day)
-            if chain.empty:
-                print(f"{day.isoformat()} no same-day SPXW contracts with OI; chain not saved")
-                chain_status = "empty"
-            else:
-                chain.to_csv(path, index=False)
-                chain_status = "built"
-                print(f"{day.isoformat()} saved chain: {path} ({len(chain)} contracts)")
+        else:
+            missing_days.append(day)
 
         cbbo_cost: float | None = None
         contracts: int | None = None
         if chain is not None and not chain.empty:
             contracts = int(chain["raw_symbol"].dropna().astype(str).nunique())
             cbbo_cost = _cbbo_cost(client, day, chain)
-            total_cbbo_cost += cbbo_cost
-            cbbo_priced_days += 1
 
-        rows.append(
-            {
-                "date": day.isoformat(),
-                "definition_cost": definition_cost,
-                "statistics_cost": statistics_cost,
-                "metadata_cost": metadata_cost,
-                "chain_status": chain_status,
-                "contracts": contracts,
-                "cbbo_1m_cost": cbbo_cost,
-            }
-        )
+        row = {
+            "date": day.isoformat(),
+            "definition_cost": definition_cost,
+            "statistics_cost": statistics_cost,
+            "metadata_cost": metadata_cost,
+            "chain_status": chain_status,
+            "contracts": contracts,
+            "cbbo_1m_cost": cbbo_cost,
+        }
+        rows.append(row)
+        row_by_day[day] = row
+
+    if args.build_missing_chains and missing_days:
+        # Re-price every missing day's paid metadata immediately before the batch starts.
+        # No definition/statistics download occurs until the whole re-priced batch fits the cap.
+        repriced: dict[date, tuple[float, float, float]] = {
+            day: _metadata_cost(client, day) for day in missing_days
+        }
+        repriced_total = sum(item[2] for item in repriced.values())
+
+        print("\nMISSING-CHAIN DOWNLOAD PREFLIGHT")
+        for day in missing_days:
+            definition_cost, statistics_cost, metadata_cost = repriced[day]
+            print(
+                f"{day.isoformat()} definition=${definition_cost:.6f} "
+                f"statistics=${statistics_cost:.6f} total=${metadata_cost:.6f}"
+            )
+        print(f"RE-PRICED MISSING-CHAIN METADATA TOTAL: ${repriced_total:.6f}")
+        print(f"METADATA DOWNLOAD COST GUARD: ${args.max_metadata_download_cost:.6f}")
+
+        if repriced_total > args.max_metadata_download_cost + 1e-12:
+            raise SystemExit(
+                "ABORTED BEFORE DOWNLOAD: re-priced missing-chain metadata cost exceeds "
+                "--max-metadata-download-cost. Increase the guard explicitly only after "
+                "reviewing the estimate."
+            )
+
+        print("PREFLIGHT PASSED: beginning definition/OI downloads within reviewed estimate guard.")
+
+        for day in missing_days:
+            definition_cost, statistics_cost, metadata_cost = repriced[day]
+            row = row_by_day[day]
+            row["definition_cost"] = definition_cost
+            row["statistics_cost"] = statistics_cost
+            row["metadata_cost"] = metadata_cost
+
+            chain = _build_chain(client, db, day)
+            path = _chain_path(day)
+            if chain.empty:
+                print(f"{day.isoformat()} no same-day SPXW contracts with OI; chain not saved")
+                row["chain_status"] = "empty"
+                continue
+
+            chain.to_csv(path, index=False)
+            row["chain_status"] = "built"
+            row["contracts"] = int(chain["raw_symbol"].dropna().astype(str).nunique())
+            row["cbbo_1m_cost"] = _cbbo_cost(client, day, chain)
+            print(f"{day.isoformat()} saved chain: {path} ({len(chain)} contracts)")
 
     summary = pd.DataFrame(rows)
+    total_metadata_cost = float(summary["metadata_cost"].sum())
+    priced_cbbo = pd.to_numeric(summary["cbbo_1m_cost"], errors="coerce")
+    cbbo_priced_days = int(priced_cbbo.notna().sum())
+    total_cbbo_cost = float(priced_cbbo.fillna(0.0).sum())
+
     print("\nMULTI-DAY COST PLAN")
     print(summary.to_string(index=False, na_rep="pending"))
     print(f"\nDATES: {len(args.dates)}")
@@ -212,11 +265,19 @@ def main() -> None:
             f"${total_metadata_cost + total_cbbo_cost:.6f}"
         )
 
-    print(
-        "NOTE: Default mode makes metadata cost-estimate calls only. --build-missing-chains "
-        "downloads definition/statistics data for missing dates and therefore incurs those "
-        "small metadata charges; it still does not download full-day CBBO quotes."
-    )
+    if args.build_missing_chains:
+        print(
+            "NOTE: --build-missing-chains downloaded definition/statistics data only after the "
+            "re-priced total fit within --max-metadata-download-cost. The guard is a local "
+            "preflight estimate guard, not a vendor transactional billing cap. Full-day CBBO "
+            "quotes were not downloaded."
+        )
+    else:
+        print(
+            "NOTE: Default mode makes metadata cost-estimate calls only and downloads no market "
+            "data. --build-missing-chains requires an explicit reviewed "
+            "--max-metadata-download-cost before any definition/OI download can begin."
+        )
 
 
 if __name__ == "__main__":
