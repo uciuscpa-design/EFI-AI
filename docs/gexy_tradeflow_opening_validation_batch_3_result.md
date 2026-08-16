@@ -80,10 +80,22 @@ The raw-flow control also varies strongly across dates, while the Greek-weighted
 
 No causal claim is established. OPRA does not identify dealer inventory or executed underlying hedge trades; `hedge_delta_units` remains a proxy.
 
+## Post-validation quality audit
+
+A local-only quality audit was run after recording the validation result. It did not alter or re-score the frozen endpoint.
+
+Across all three validation dates, the local causal files show 30 common timestamps and 30/30 replay-matched timestamps. Median symbol-minute Greek solve rates were 97.4% on 2026-08-06, 98.9% on 2026-08-05, and 97.9% on 2026-08-04. Median classified contract volume with usable Greeks was 99.9%, 100.0%, and 100.0%, respectively.
+
+Therefore the positive 2026-08-06 residual should **not** be attributed to an obvious replay or Greek-coverage failure. The quality metrics are comparable to the two successful negative-sign days.
+
+A second diagnostic clue is that the ordinary 15-minute `hedge_delta_units` association on 2026-08-06 remained negative (-0.209360), while the frozen residual after controlling momentum and raw flow was positive (+0.121166). This means the validation failure occurs in the incremental information after controls rather than in the raw direction of the Greek-weighted hedge proxy itself.
+
+The next local-only audit should therefore examine control structure—especially rank correlation among `hedge_delta_units`, `flow_net_signed_contracts`, and `backward_return_1m_bps`, and how the hedge/target association changes when controlling momentum only, raw flow only, and both. This is a statistical diagnostic, not a new signal-selection exercise.
+
 ## Next rule
 
 Do not tune the signal, coverage floor, horizon, aggressor classifier, strike band, or sign convention in response to the failed 2026-08-06 session.
 
-Before purchasing more TCBBO, run a local-only batch-3 quality audit using the already generated files. Confirm, for all three dates, Greek symbol-minute solve rate, classified-volume Greek coverage, replay-match count, and lowest-coverage replay-matched minutes. The purpose is only to rule in or out a mechanical/data-quality explanation for the positive 2026-08-06 endpoint; it must not be used to remove that day from the validation set.
+Treat 2026-08-06 as genuine observed heterogeneity unless a pre-specified statistical-control audit demonstrates that the positive residual is primarily a suppression/collinearity artifact. Even then, do not remove or relabel the day from batch-3 validation.
 
-If data quality is comparable across the three dates, treat 2026-08-06 as genuine heterogeneity and freeze any future regime hypothesis separately before acquiring new untouched data.
+Do not purchase more TCBBO until the control-structure audit is complete. Any future regime hypothesis must be frozen separately before acquiring new untouched data.
