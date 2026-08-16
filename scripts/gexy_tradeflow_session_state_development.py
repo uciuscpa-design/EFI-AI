@@ -95,6 +95,22 @@ def _safe_ratio(numerator: float, denominator: float) -> float:
 
 def _opening_sample(raw: pd.DataFrame, hedge: pd.DataFrame) -> pd.DataFrame:
     sample = matched_with_coverage(raw, hedge, min_volume_coverage=MIN_VOLUME_COVERAGE)
+
+    # matched_with_coverage intentionally carries only configured raw *signal*
+    # columns into the aligned frame. The frozen session-state screen also needs
+    # classified contract volume as the denominator for early raw imbalance and
+    # as a standalone activity descriptor, so attach exactly that raw field on
+    # the same causal timestamp without changing any feature timing or filtering.
+    raw_volume_column = "flow_classified_contract_volume"
+    if raw_volume_column not in raw.columns:
+        raise ValueError(f"raw frame missing required session-state column: {raw_volume_column}")
+    if raw_volume_column not in sample.columns:
+        right = raw[["timestamp", raw_volume_column]].copy()
+        right["timestamp"] = pd.to_datetime(right["timestamp"], utc=True, errors="coerce")
+        right[raw_volume_column] = pd.to_numeric(right[raw_volume_column], errors="coerce")
+        right = right.dropna(subset=["timestamp"]).drop_duplicates("timestamp", keep="last")
+        sample = sample.merge(right, on="timestamp", how="left", validate="one_to_one")
+
     sample = assign_session_window(sample)
     sample = sample.loc[sample["session_window"] == "opening"].copy()
     return sample.reset_index(drop=True)
