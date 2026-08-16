@@ -56,8 +56,30 @@ Once the chains existed, the same run metadata-priced the exact-symbol full-day 
 
 **Estimated full-day CBBO-1m total: $0.101896.**
 
-The combined metadata estimate plus priced-but-not-yet-downloaded CBBO estimate is $0.236519, but only the $0.134623 chain-input stage has been authorized and executed so far.
+The combined metadata estimate plus priced-but-not-yet-downloaded CBBO estimate is $0.236519, but only the $0.134623 chain-input stage has been executed so far.
 
 Opening-only +/-200 TCBBO pricing remains pending until replay features exist so the opening forward can be determined under the frozen selection rule.
 
-No batch-4 endpoint has been inspected. No CBBO-1m or TCBBO purchase is authorized by this document unless a later recorded review explicitly sets its own cap.
+## CBBO replay safety change and fresh no-download preflight
+
+Before any CBBO purchase, `scripts/gexy_multiday_replay.py` was hardened to preserve first-seen date order, default `--max-new-cbbo-cost` to $0.00, and re-price every missing CBBO day immediately before the paid batch. If the re-priced total exceeds the explicit cap, the script aborts before download. The local regression test for the replay planner passed before the fresh preflight.
+
+A fresh no-download replay preflight was then run in the frozen order and returned:
+
+| Date | Contracts | Quotes cached | Exact-symbol full-day CBBO-1m estimate |
+|---|---:|---|---:|
+| 2026-08-03 | 492 | no | $0.026307 |
+| 2026-07-31 | 958 | no | $0.050464 |
+| 2026-07-30 | 474 | no | $0.025125 |
+
+**Fresh estimated new CBBO total: $0.101896.** The displayed cost guard was $0.000000 and the script exited with `NO MARKET DATA DOWNLOADED`, confirming fail-closed behavior.
+
+## Reviewed paid CBBO cap
+
+The reviewed Batch-4 full-day exact-symbol CBBO-1m cap is **$0.12 total** for the frozen three-date invocation. This provides $0.018104 of estimate headroom over the fresh $0.101896 preflight.
+
+The paid CBBO replay acquisition is authorized only if the immediate pre-download re-priced total is at or below $0.12. If it exceeds $0.12, the script must abort before download and no higher cap should be substituted without a new recorded review.
+
+This authorization covers only the exact-symbol full-day CBBO-1m data needed to generate the replay caches for 2026-08-03, 2026-07-31, and 2026-07-30. It does **not** authorize opening-window TCBBO or any other market-data purchase.
+
+No batch-4 endpoint has been inspected.
