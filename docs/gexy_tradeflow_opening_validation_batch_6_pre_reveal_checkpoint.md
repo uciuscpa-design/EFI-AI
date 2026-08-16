@@ -72,11 +72,38 @@ The validator is fixed to the opening 15-minute sample and 90% coverage floor. I
 
 Outputs are Batch-6-specific and do not overwrite prior-batch CSVs.
 
+## Local preparation execution
+
+The first safeguard run produced **3 passed, 1 failed**. The only failure was the Batch-6 validator CLI safeguard requiring the literal phrase `no market-data request` in `--help`; the validator help text instead said `or market-data request is made`. This was a wording-only safeguard failure. No validation endpoint had been executed or inspected.
+
+The Batch-6 local preparation wrapper was then run across all three frozen dates. Every stage completed successfully:
+
+- 2026-07-24: extract OK, raw features OK, hedge features OK
+- 2026-07-23: extract OK, raw features OK, hedge features OK
+- 2026-07-22: extract OK, raw features OK, hedge features OK
+
+The wrapper ended with:
+
+- `BATCH-6 LOCAL PREPARATION COMPLETE`
+- `DATES PREPARED: 3`
+- `NO PAID DATA REQUESTS`
+- `NO VALIDATION ENDPOINTS EVALUATED`
+
+Because preparation completed successfully and the failed safeguard concerned only validator help wording, the local feature preparation does not need to be repeated after the wording repair.
+
+## Validator safeguard wording repair
+
+The validator help text was repaired at commit `ce8dfa6fdd3ae21ecc824cbb2c1094e46b2d4932` to include the exact phrase `no market-data request` required by the existing CLI safeguard.
+
+This repair changed only the argparse description text. It did **not** change the frozen sample construction, 15-minute horizon, 90% coverage floor, Endpoint A or B calculations, controls, correlations, output columns, or any market-data behavior.
+
+The safeguard suite must be rerun after syncing this commit and must pass before the validator is executed.
+
 ## Reveal discipline
 
 Run the safeguard tests first. Then run Batch-6 local preparation across all three frozen dates in one invocation. Do not run the validator if preparation fails on any date.
 
-If preparation completes for all three dates, record that completion before running the dedicated validator once across all three dates. No endpoint should be inspected date-by-date before the full three-date reveal.
+Preparation has now completed for all three dates without endpoint evaluation. After the validator wording repair, rerun the safeguard suite. If all safeguards pass, the dedicated validator may then be run once across all three dates. No endpoint should be inspected date-by-date before the full three-date reveal.
 
 No leave-one-out, contribution-concentration, subwindow, alternate horizon, or regime diagnostic is part of the primary reveal. Any post-result diagnostic requires a separately frozen protocol after the official Batch-6 result is recorded.
 
