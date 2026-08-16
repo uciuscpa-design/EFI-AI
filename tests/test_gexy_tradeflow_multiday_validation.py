@@ -61,9 +61,9 @@ def test_pooled_nonoverlap_uses_categorical_day_fixed_effects() -> None:
     frames: list[tuple[str, pd.DataFrame, pd.DataFrame]] = []
     day_levels = [0.0, 10.0, 0.0]
     target_levels = [0.0, 20.0, 0.0]
+    test_days = pd.date_range("2026-08-07T13:35:00Z", periods=3, freq="D")
 
-    for day_offset, (signal_level, target_level) in enumerate(zip(day_levels, target_levels, strict=True)):
-        day = pd.Timestamp("2026-08-07T13:35:00Z") + pd.Timedelta(days=day_offset)
+    for day, signal_level, target_level in zip(test_days, day_levels, target_levels, strict=True):
         timestamps = pd.date_range(day, periods=3, freq="5min")
         raw = pd.DataFrame(
             {
