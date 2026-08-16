@@ -64,10 +64,33 @@ The validator is fixed to the 15-minute opening sample and 90% coverage floor. I
 
 Outputs are Batch-5-specific and do not overwrite Batch-4 CSVs.
 
+## Local preparation completion
+
+The two Batch-5 safeguard test files were run together before local preparation and completed successfully with **4 passed**.
+
+The Batch-5 preparation wrapper was then run once across the complete frozen date set in the frozen order:
+
+1. 2026-07-29
+2. 2026-07-28
+3. 2026-07-27
+
+For every date, all three local stages completed successfully:
+
+- `extract: OK`
+- `raw_features: OK`
+- `hedge_features: OK`
+
+The wrapper concluded with:
+
+- `BATCH-5 LOCAL PREPARATION COMPLETE`
+- `DATES PREPARED: 3`
+- `NO PAID DATA REQUESTS: all stages read only existing local caches.`
+- `NO VALIDATION ENDPOINTS EVALUATED: run the frozen Batch-5 validator separately after preparation.`
+
+Therefore the complete frozen three-date feature set is prepared and the Batch-5 endpoints remain unseen at this checkpoint.
+
 ## Reveal discipline
 
-Run the safeguard tests first. Then run Batch-5 local preparation across all three frozen dates in one invocation. Do not run the validator if preparation fails on any date.
-
-If preparation completes for all three dates, record that checkpoint before running the dedicated validator once across all three dates. No endpoint should be inspected date-by-date before the full three-date reveal.
+The next permitted operation is one local-only invocation of the dedicated Batch-5 validator across all three dates simultaneously. No date-by-date endpoint inspection or alternate analysis should occur first.
 
 The Batch-5 validator is local-only and makes no paid data request. The eventual result cannot erase Batch-4 failures, cannot retroactively validate the earlier 8/8 pattern, and cannot establish causality, dealer inventory, or production edge.
