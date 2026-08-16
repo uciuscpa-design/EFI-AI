@@ -50,8 +50,6 @@ After the chains were built, the same run metadata-priced the exact-symbol full-
 
 **Estimated exact-symbol full-day CBBO-1m total: $0.080599.**
 
-The combined metadata estimate plus currently priced CBBO estimate is **$0.215307**. Only the $0.134707 chain-input stage has been executed so far; the CBBO figure is pricing-only.
-
 ## Fresh no-download CBBO replay preflight
 
 The guarded multi-day replay planner was then run for the same frozen three-date order with `--horizons 15` and without `--download`.
@@ -64,12 +62,29 @@ The guarded multi-day replay planner was then run for the same frozen three-date
 
 **Fresh estimated new CBBO total: $0.080599.** The displayed cost guard was **$0.000000**, and the planner exited with `NO MARKET DATA DOWNLOADED`, confirming fail-closed behavior.
 
-## Reviewed paid CBBO cap
+## Reviewed paid CBBO cap and completed replay acquisition
 
-The reviewed Batch-5 full-day exact-symbol CBBO-1m cap is **$0.10 total** for the frozen three-date invocation. This provides $0.019401 of estimate headroom over the fresh $0.080599 preflight.
+The reviewed Batch-5 full-day exact-symbol CBBO-1m cap was **$0.10 total** for the frozen three-date invocation, providing $0.019401 of estimate headroom over the fresh $0.080599 preflight.
 
-The paid replay acquisition is authorized only if the immediate pre-download re-priced total is at or below **$0.10**. If the re-priced total exceeds $0.10, the script must abort before download and no higher cap may be substituted without a new recorded review.
+Immediately before the paid replay acquisition, the missing CBBO scope was re-priced at **$0.080599**, below the $0.10 guard. The acquisition then completed for all three frozen dates and built the cached full-day CBBO files plus 15-minute replay feature files. The final multi-day replay summary reported:
 
-This authorization covers only the exact-symbol full-day CBBO-1m data required to build replay caches for 2026-07-29, 2026-07-28, and 2026-07-27. It does not authorize opening-window TCBBO or any other Batch-5 market-data purchase.
+- `DATES: 3`
+- `RE-PRICED NEW CBBO COST USED FOR GUARD: $0.080599`
+- manifest: `gexy_spxw_multiday_replay_manifest.csv`
 
-After all three replay caches and 15-minute replay features are built, the next permitted paid-data-related operation is metadata-only pricing of the frozen opening 09:30-10:00, opening-forward +/-200 SPX-point TCBBO scope. No Batch-5 endpoint may be extracted or inspected before all later authorized acquisitions and local preparation are complete.
+The logged replay construction for 2026-07-28 and 2026-07-27 each produced 388 replay minutes with one low-parity-pair minute skipped. These are upstream replay diagnostics only and do not expose the Batch-5 trade-flow endpoints.
+
+The cumulative pre-download estimate used for authorized Batch-5 upstream acquisition so far is **$0.134707 metadata + $0.080599 CBBO = $0.215306** (rounding differs by $0.000001 from the planner's previously displayed $0.215307 combined estimate). This is estimate-based budget accounting, not final vendor billing.
+
+No opening-window TCBBO has been acquired and no Batch-5 endpoint has been inspected.
+
+## Next rule
+
+The replay caches now provide the opening-forward anchors needed for the frozen strike selection. The next permitted operation is **metadata-only pricing** of SPXW 0DTE TCBBO for the exact Batch-5 scope:
+
+- dates in frozen order: 2026-07-29, 2026-07-28, 2026-07-27
+- window: 09:30-10:00 America/New_York only
+- strike band: opening-forward +/-200 SPX points
+- schema: TCBBO
+
+No TCBBO purchase is authorized yet. Record and review the per-date and total TCBBO estimates before setting any paid cap. No Batch-5 endpoint may be extracted or inspected before all later authorized acquisitions and local preparation are complete.
