@@ -19,10 +19,19 @@ HEARTBEAT_SECONDS = 30.0
 
 
 def _parse_dates(value: str) -> tuple[date, ...]:
-    days = tuple(sorted({date.fromisoformat(item.strip()) for item in value.split(",") if item.strip()}))
+    days: list[date] = []
+    seen: set[date] = set()
+    for item in value.split(","):
+        raw = item.strip()
+        if not raw:
+            continue
+        day = date.fromisoformat(raw)
+        if day not in seen:
+            seen.add(day)
+            days.append(day)
     if not days:
         raise argparse.ArgumentTypeError("--dates must contain at least one ISO date")
-    return days
+    return tuple(days)
 
 
 def _chain_path(day: date) -> Path:
@@ -82,16 +91,24 @@ def _run_with_heartbeat(command: list[str], day: date) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Run multiple cached-or-download SPXW 0DTE replays with a preflight Databento cost guard. "
-            "Without --download, only exact-symbol CBBO costs are estimated. With --download, cached "
-            "quote days are replayed offline and missing quote days are downloaded only if the total "
-            "estimated new CBBO cost is within --max-new-cbbo-cost."
+            "Run multiple cached-or-download SPXW 0DTE replays with a fail-closed Databento "
+            "cost guard. Without --download, only exact-symbol CBBO costs are estimated. With "
+            "--download, missing quote days are re-priced immediately before the batch and are "
+            "downloaded only when the re-priced total fits an explicit --max-new-cbbo-cost."
         )
     )
     parser.add_argument("--dates", required=True, type=_parse_dates)
     parser.add_argument("--horizons", default="1,5,15,30,60")
     parser.add_argument("--download", action="store_true")
-    parser.add_argument("--max-new-cbbo-cost", type=float, default=0.25)
+    parser.add_argument(
+        "--max-new-cbbo-cost",
+        type=float,
+        default=0.0,
+        help=(
+            "Maximum total estimated new CBBO-1m download cost. Default 0.0 makes --download "
+            "fail closed until a reviewed cap is supplied explicitly."
+        ),
+    )
     args = parser.parse_args()
 
     if args.max_new_cbbo_cost < 0:
@@ -110,6 +127,7 @@ def main() -> None:
 
     client = db.Historical(settings.databento_api_key)
     plan_rows: list[dict[str, object]] = []
+    chain_by_day: dict[date, pd.DataFrame] = {}
     total_new_cost = 0.0
 
     for day in args.dates:
@@ -119,6 +137,7 @@ def main() -> None:
         chain = pd.read_csv(chain_path)
         if "raw_symbol" not in chain.columns:
             raise SystemExit(f"chain CSV missing raw_symbol: {chain_path}")
+        chain_by_day[day] = chain
 
         quote_path = _quotes_path(day)
         cached = quote_path.exists()
@@ -141,14 +160,33 @@ def main() -> None:
     print(f"COST GUARD: ${args.max_new_cbbo_cost:.6f}")
 
     if not args.download:
-        print("NO MARKET DATA DOWNLOADED. Re-run with --download to execute within the cost guard.")
+        print("NO MARKET DATA DOWNLOADED. Re-run with --download only after reviewing an explicit cost guard.")
         return
 
-    if total_new_cost > args.max_new_cbbo_cost + 1e-12:
+    missing_days = [day for day in args.dates if not _quotes_path(day).exists()]
+    repriced_costs: dict[date, float] = {
+        day: _quote_cost(client, day, chain_by_day[day]) for day in missing_days
+    }
+    repriced_total = sum(repriced_costs.values())
+
+    print("\nCBBO DOWNLOAD PREFLIGHT REPRICE")
+    for day in missing_days:
+        print(f"{day.isoformat()} cbbo_1m=${repriced_costs[day]:.6f}")
+    print(f"RE-PRICED NEW CBBO TOTAL: ${repriced_total:.6f}")
+    print(f"CBBO DOWNLOAD COST GUARD: ${args.max_new_cbbo_cost:.6f}")
+
+    if repriced_total > args.max_new_cbbo_cost + 1e-12:
         raise SystemExit(
-            "ABORTED: estimated new CBBO cost exceeds --max-new-cbbo-cost. "
+            "ABORTED BEFORE DOWNLOAD: re-priced new CBBO cost exceeds --max-new-cbbo-cost. "
             "Increase the guard explicitly only after reviewing the estimate."
         )
+
+    for row in plan_rows:
+        day = date.fromisoformat(str(row["date"]))
+        if day in repriced_costs:
+            row["estimated_new_cbbo_cost"] = repriced_costs[day]
+
+    print("PREFLIGHT PASSED: beginning CBBO-1m acquisition within the reviewed estimate guard.")
 
     replay_script = Path("scripts/gexy_databento_replay.py")
     if not replay_script.exists():
@@ -173,14 +211,10 @@ def main() -> None:
             command.extend(["--quotes-csv", str(quote_path)])
             print(f"\n{day.isoformat()} REPLAYING FROM CACHE: {quote_path}", flush=True)
         else:
-            estimated_cost = next(
-                row["estimated_new_cbbo_cost"]
-                for row in plan_rows
-                if row["date"] == day.isoformat()
-            )
+            estimated_cost = repriced_costs[day]
             print(
                 f"\n{day.isoformat()} DOWNLOADING + CACHING CBBO-1m "
-                f"(estimated ${estimated_cost:.6f})",
+                f"(re-priced estimate ${estimated_cost:.6f})",
                 flush=True,
             )
 
@@ -201,10 +235,11 @@ def main() -> None:
 
     print("\nMULTI-DAY REPLAY COMPLETE")
     print(f"DATES: {len(args.dates)}")
-    print(f"ESTIMATED NEW CBBO COST USED FOR GUARD: ${total_new_cost:.6f}")
+    print(f"RE-PRICED NEW CBBO COST USED FOR GUARD: ${repriced_total:.6f}")
     print(f"SAVED MANIFEST: {manifest_path}")
     print(
-        "NOTE: Each day is cached independently. Re-running this batch after all quote CSVs exist "
+        "NOTE: The CBBO guard is a local preflight estimate guard, not a vendor transactional "
+        "billing cap. Each day is cached independently; re-running after all quote CSVs exist "
         "reuses local data and incurs no new CBBO download cost."
     )
 
