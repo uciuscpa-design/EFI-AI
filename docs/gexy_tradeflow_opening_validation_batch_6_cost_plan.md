@@ -71,8 +71,6 @@ Immediately before the paid replay acquisition, the missing CBBO scope was re-pr
 - `RE-PRICED NEW CBBO COST USED FOR GUARD: $0.084454`
 - manifest: `gexy_spxw_multiday_replay_manifest.csv`
 
-The visible replay diagnostics include successful feature generation for 2026-07-23 and 2026-07-22. For 2026-07-22, 385 replay minutes were built with 4 low-parity-pair minutes skipped; for 2026-07-23, the replay reported zero low-parity-pair minutes skipped. These are upstream construction diagnostics only and do not expose the Batch-6 trade-flow endpoints.
-
 The cumulative pre-download estimate used for authorized Batch-6 upstream acquisition before TCBBO is **$0.136567 metadata + $0.084454 CBBO = $0.221021**. This is estimate-based budget accounting, not final vendor billing.
 
 ## Opening-only bounded TCBBO pricing
@@ -87,22 +85,26 @@ After all three replay caches were complete, the trade-flow cost planner was run
 
 **Estimated bounded opening-only TCBBO total: $6.333809.**
 
-The planner confirmed all three chains were cached, the frozen order was preserved, the window was 09:30-10:00 only, the strike scope was opening-forward +/-200 points, and the pricing run called metadata cost estimation only. No Batch-6 endpoint was extracted or inspected.
+## Reviewed paid TCBBO caps and completed acquisition
 
-## Reviewed paid TCBBO caps
+The reviewed per-date preflight-estimate caps were:
 
-The per-date downloader remains fail-closed with an immediate re-price before any paid request and a hard local ceiling of $5.00 per invocation. To keep the requests tightly bounded while allowing modest pricing headroom, the reviewed per-date preflight-estimate caps are:
+| Date | Estimate | Reviewed cap | Immediate recheck | Result |
+|---|---:|---:|---:|---|
+| 2026-07-24 | $2.076316 | $2.14 | $2.076316 | acquired |
+| 2026-07-23 | $2.356086 | $2.43 | $2.356086 | acquired |
+| 2026-07-22 | $1.901407 | $1.96 | $1.901407 | acquired |
 
-| Date | Current estimate | Reviewed cap | Estimate headroom |
-|---|---:|---:|---:|
-| 2026-07-24 | $2.076316 | **$2.14** | $0.063684 |
-| 2026-07-23 | $2.356086 | **$2.43** | $0.073914 |
-| 2026-07-22 | $1.901407 | **$1.96** | $0.058593 |
+All three immediate pre-download rechecks stayed within their recorded caps, and acquisition completed in the frozen order **2026-07-24 -> 2026-07-23 -> 2026-07-22**. The cached raw files are:
 
-The sum of the reviewed per-date caps is **$6.53**, compared with the current three-date estimate of **$6.333809**.
+- `data/gexy/tradeflow/gexy_spxw_2026-07-24_0930_1000_tcbbo.dbn.zst`
+- `data/gexy/tradeflow/gexy_spxw_2026-07-23_0930_1000_tcbbo.dbn.zst`
+- `data/gexy/tradeflow/gexy_spxw_2026-07-22_0930_1000_tcbbo.dbn.zst`
 
-Each paid request is authorized only if its immediate pre-download re-price is at or below that date's recorded cap. If any date exceeds its cap, stop before download and review the changed price rather than raising the cap automatically.
+The summed TCBBO pre-download estimate was **$6.333809**. Combined with the earlier Definition/OI and CBBO estimate guards, cumulative Batch-6 estimate-based acquisition accounting is **$6.554830**. These values are pre-download estimates/guards rather than final vendor billing.
 
-Acquisition must remain in frozen order: **2026-07-24 -> 2026-07-23 -> 2026-07-22**. This authorization covers only opening-window TCBBO for the frozen 09:30-10:00, +/-200-point scope. It does not authorize closing-window data, any alternate strike band, or any endpoint inspection between dates.
+No Batch-6 endpoint was inspected during acquisition. No further paid market-data request is required before the Batch-6 local preparation and one-time frozen reveal.
 
-No Batch-6 endpoint may be extracted or inspected until all three authorized TCBBO acquisitions are complete and all three dates have gone through the frozen local preparation pipeline.
+## Next rule
+
+All remaining work before the primary Batch-6 reveal must be local-only. Run a Batch-6-specific preparation wrapper across all three frozen dates before the dedicated 15-minute validator. The preparation wrapper must not compute or display Endpoint A or Endpoint B. No date-by-date endpoint inspection is permitted before the one-time full three-date reveal.
