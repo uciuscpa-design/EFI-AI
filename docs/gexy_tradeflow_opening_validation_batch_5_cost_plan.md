@@ -76,15 +76,34 @@ The logged replay construction for 2026-07-28 and 2026-07-27 each produced 388 r
 
 The cumulative pre-download estimate used for authorized Batch-5 upstream acquisition so far is **$0.134707 metadata + $0.080599 CBBO = $0.215306** (rounding differs by $0.000001 from the planner's previously displayed $0.215307 combined estimate). This is estimate-based budget accounting, not final vendor billing.
 
-No opening-window TCBBO has been acquired and no Batch-5 endpoint has been inspected.
+## Opening-only bounded TCBBO pricing
 
-## Next rule
+After all three replay caches were complete, the trade-flow cost planner was run in metadata-only mode for the exact frozen Batch-5 scope: SPXW 0DTE, schema `tcbbo`, 09:30-10:00 America/New_York only, opening-forward +/-200 SPX points, and the three dates in frozen order. No TCBBO records were downloaded.
 
-The replay caches now provide the opening-forward anchors needed for the frozen strike selection. The next permitted operation is **metadata-only pricing** of SPXW 0DTE TCBBO for the exact Batch-5 scope:
+| Date | Opening forward | Selected contracts | Opening TCBBO estimate |
+|---|---:|---:|---:|
+| 2026-07-29 | 7418.484534 | 160 | $1.651881 |
+| 2026-07-28 | 7412.995501 | 160 | $2.003905 |
+| 2026-07-27 | 7470.111042 | 160 | $2.247783 |
 
-- dates in frozen order: 2026-07-29, 2026-07-28, 2026-07-27
-- window: 09:30-10:00 America/New_York only
-- strike band: opening-forward +/-200 SPX points
-- schema: TCBBO
+**Estimated bounded opening-only TCBBO total: $5.903569.**
 
-No TCBBO purchase is authorized yet. Record and review the per-date and total TCBBO estimates before setting any paid cap. No Batch-5 endpoint may be extracted or inspected before all later authorized acquisitions and local preparation are complete.
+The planner confirmed all three chains were cached, the frozen order was preserved, the window was 09:30-10:00 only, the strike scope was opening-forward +/-200 points, and the pricing run called metadata cost estimation only. No Batch-5 endpoint was extracted or inspected.
+
+## Reviewed paid TCBBO caps
+
+The existing per-date TCBBO downloader remains fail-closed with an immediate exact re-price before any paid request and a hard local ceiling of $5.00 per invocation. To keep the authorized request tightly bounded while allowing modest pricing headroom, the reviewed per-date preflight-estimate caps are:
+
+| Date | Current estimate | Reviewed cap | Estimate headroom |
+|---|---:|---:|---:|
+| 2026-07-29 | $1.651881 | **$1.70** | $0.048119 |
+| 2026-07-28 | $2.003905 | **$2.07** | $0.066095 |
+| 2026-07-27 | $2.247783 | **$2.32** | $0.072217 |
+
+The sum of the reviewed per-date caps is **$6.09**, compared with the current three-date estimate of **$5.903569**.
+
+Each paid request is authorized only if its immediate pre-download re-price is at or below that date's recorded cap. If any date exceeds its cap, stop before download and review the changed price rather than raising the cap automatically.
+
+Acquisition must remain in frozen order: **2026-07-29 -> 2026-07-28 -> 2026-07-27**. This authorization covers only opening-window TCBBO for the frozen 09:30-10:00, +/-200-point scope. It does not authorize closing-window data, any alternate strike band, or any endpoint inspection between dates.
+
+No Batch-5 endpoint may be extracted or inspected until all three authorized TCBBO acquisitions are complete and all three dates have gone through the frozen local preparation pipeline.
