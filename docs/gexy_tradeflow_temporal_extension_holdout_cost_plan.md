@@ -46,7 +46,7 @@ The planner explicitly reported that Stage 1 downloaded definition/statistics da
 
 ## Stage 2 — exact-symbol full-day CBBO
 
-With all three cached chains available, the exact-symbol 09:30-16:00 America/New_York CBBO-1m estimates are:
+With all three cached chains available, the exact-symbol 09:30-16:00 America/New_York CBBO-1m estimates were:
 
 | Date | Contracts | Exact-symbol CBBO-1m estimate |
 |---|---:|---:|
@@ -56,32 +56,48 @@ With all three cached chains available, the exact-symbol 09:30-16:00 America/New
 
 Exact Stage-2 CBBO total estimate: **$0.105724**.
 
-Estimated cumulative Stage-1 + Stage-2 data cost: **$0.241660**.
+Reviewed Stage-2 new-CBBO guard: **$0.12 total**.
 
-### Reviewed Stage-2 cap
-
-Freeze a total new-CBBO guard of **$0.12** for the three dates combined.
-
-This is a local fail-closed preflight estimate guard, not a vendor transactional billing cap. The replay driver must re-price all missing CBBO days immediately before any CBBO acquisition and abort if the re-priced total exceeds $0.12.
-
-Authorized Stage-2 paid command only after explicit user execution:
+Executed paid command:
 
 ```powershell
 uv run --with databento --with pandas python scripts/gexy_multiday_replay.py --dates 2026-07-21,2026-07-20,2026-07-17 --download --max-new-cbbo-cost 0.12
 ```
 
-The replay driver may reuse any already-cached CBBO day at $0 new CBBO cost. For missing quote days it must use exact chain symbols only and the frozen 09:30-16:00 CBBO-1m scope.
+Immediate Stage-2 pre-download re-price remained **$0.105724**, below the $0.12 guard. All three dates completed and the replay driver saved `gexy_spxw_multiday_replay_manifest.csv`.
 
-The replay-generated state/features are preparation artifacts only. Do not inspect or adjudicate the temporal-extension Endpoint-B holdout result yet.
+Observed replay preparation included:
+
+- 2026-07-20: 474 contracts, 118610 cached quote rows, 388 replay minutes, 1 minute skipped for low parity pairs, and replay features saved.
+- 2026-07-17: 1018 contracts, 226038 cached quote rows, 389 replay minutes, 0 minutes skipped for low parity pairs, and replay features saved.
+- 2026-07-21 also completed as part of the three-date multiday replay; the user-provided transcript excerpt did not include its detailed replay row counts, so none are invented here.
+
+The multiday driver reported `DATES: 3`, `RE-PRICED NEW CBBO COST USED FOR GUARD: $0.105724`, and a saved manifest. Re-running after the quote CSVs exist should reuse cached CBBO at $0 new CBBO download cost.
+
+Estimated cumulative Stage-1 + Stage-2 data cost based on the frozen estimates: **$0.241660**.
+
+The replay-generated state/features remain preparation artifacts only. Do not inspect or adjudicate the temporal-extension Endpoint-B holdout result yet.
 
 ## Stage 3 — opening TCBBO tradeflow
 
 Opening TCBBO acquisition remains **not yet authorized**.
 
-After Stage 2 succeeds:
+The exact frozen Stage-3 scope is:
+
+- dates: 2026-07-21, 2026-07-20, 2026-07-17;
+- window: 09:30-10:00 America/New_York only;
+- schema: OPRA TCBBO;
+- strike scope: opening-forward ±200 SPX points;
+- exact symbols selected from each cached same-day SPXW 0DTE chain;
+- pricing first, with no `--execute` flag;
+- separate reviewed per-date cap required before each paid request.
+
+The fail-closed downloader `scripts/gexy_tradeflow_download.py` prices the exact request without downloading when `--execute` is omitted. It re-prices the exact request immediately before any paid download, rejects any estimate above the explicit cap, refuses to overwrite existing TCBBO files, and has a hard absolute $5 ceiling.
+
+After Stage-2 success:
 
 1. retain the cached CBBO/replay state locally;
-2. price the exact frozen opening-window TCBBO scope for the three holdout dates using metadata-only planning;
+2. price the exact frozen opening-window TCBBO scope for all three holdout dates using dry-run metadata planning only;
 3. record the exact per-date estimates;
 4. freeze separate reviewed TCBBO caps before any paid TCBBO request;
 5. acquire/extract/build tradeflow features without revealing the holdout Endpoint B;
