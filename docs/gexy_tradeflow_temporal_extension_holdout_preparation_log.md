@@ -211,11 +211,51 @@ Quality note: all 30 completed opening-window flow minutes matched cached replay
 
 All three reserved dates have completed the frozen causal minute tradeflow feature build. Each date produced 30 completed opening-window minutes with 30/30 exact replay matches. The M to M+1 causal alignment was preserved, and forward-return label values remained hidden from terminal output during preparation.
 
+## Stage 4C — Black76 Greek-weighted hedge proxy features and coverage
+
+The Stage 4C builder reads only local classified TCBBO CSVs and cached replay state. It computes completed-minute Black76 delta/gamma hedge proxies using the frozen sign convention and writes forward-return labels to the local hedge-feature CSV while hiding those labels from terminal output by default.
+
+The frozen 90% Greek-volume rule is an inclusion rule: Endpoint B uses only opening-window minutes whose `hedge_greek_solved_contract_volume_pct` is at least 0.90. A minute below the threshold is excluded; the protocol does not require every opening-window minute to meet 90%.
+
+### 2026-07-21 — hedge build complete; coverage eligibility verified
+
+Executed local-only hedge build:
+
+```powershell
+uv run --with pandas python scripts/gexy_tradeflow_hedge_features.py --date 2026-07-21 --windows 09:30-10:00
+```
+
+Local output:
+
+- `data/gexy/tradeflow/gexy_spxw_2026-07-21_tradeflow_hedge_features.csv`
+
+Holdout-safe coverage inspection read only `flow_minute`, `timestamp`, and `hedge_greek_solved_contract_volume_pct`; no forward-return labels were read or displayed.
+
+Observed coverage preparation summary:
+
+| Metric | Value |
+|---|---:|
+| Total opening-window minutes | 30 |
+| Eligible minutes at >=90% Greek-volume coverage | 29 |
+| Excluded minutes below 90% | 1 |
+| Median Greek-volume coverage | 99.788056% |
+| Raw minimum Greek-volume coverage | 0.000000% |
+| Excluded flow minute | 2026-07-21 13:30:00+00:00 |
+| Excluded feature timestamp | 2026-07-21 13:31:00+00:00 |
+| Excluded-minute coverage | 0.000000% |
+
+Quality/adjudication note: the single 0%-coverage minute is not repaired, imputed, substituted, or used to alter the frozen threshold. It is excluded exactly under the pre-specified >=90% per-minute sample rule. The remaining 29 minutes are eligible for the eventual holdout endpoint calculation. No forward-return label or Endpoint B value has been inspected.
+
+### Remaining Stage 4C work
+
+- 2026-07-20: Black76 hedge build and holdout-safe coverage verification pending.
+- 2026-07-17: Black76 hedge build and holdout-safe coverage verification pending.
+
 ## Next frozen preparation steps
 
-1. build Black76 Greek-weighted hedge proxy features using the frozen hedge sign convention;
-2. verify the frozen Greek-volume coverage requirement, including the 90% coverage floor;
-3. only after all preparation checks pass, run the dedicated holdout reveal.
+1. complete Stage 4C Black76 hedge builds and coverage eligibility checks for 2026-07-20 and 2026-07-17;
+2. verify the dedicated holdout validator applies the frozen 09:30-10:00, >=90%-coverage, 15-minute Endpoint-B sample exactly;
+3. only after all preparation safeguards pass, reveal all three untouched Endpoint-B values together in one dedicated invocation.
 
 ## Scientific guardrails
 
