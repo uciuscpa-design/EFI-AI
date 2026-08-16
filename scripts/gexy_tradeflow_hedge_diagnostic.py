@@ -95,6 +95,9 @@ def main() -> None:
     if "replay_match" in matched.columns:
         matched = matched.loc[matched["replay_match"].fillna(False)].copy()
     solved = pd.to_numeric(matched.get("hedge_greek_solved_pct"), errors="coerce")
+    volume_solved = pd.to_numeric(
+        matched.get("hedge_greek_solved_contract_volume_pct"), errors="coerce"
+    )
 
     print("GEXY RAW FLOW VS GREEK-WEIGHTED HEDGE FLOW")
     print(f"DATE: {args.trading_day.isoformat()}")
@@ -103,6 +106,9 @@ def main() -> None:
     if solved.notna().any():
         print(f"MEDIAN HEDGE GREEK SOLVED PCT: {solved.median():.1%}")
         print(f"MIN HEDGE GREEK SOLVED PCT: {solved.min():.1%}")
+    if volume_solved.notna().any():
+        print(f"MEDIAN CLASSIFIED VOLUME WITH GREEKS: {volume_solved.median():.1%}")
+        print(f"MIN CLASSIFIED VOLUME WITH GREEKS: {volume_solved.min():.1%}")
     print(f"RAW SIGNALS: {len(RAW_FLOW_SIGNALS)}")
     print(f"HEDGE SIGNALS: {len(HEDGE_FLOW_SIGNALS)}")
     print(f"HORIZONS: {','.join(str(item) for item in args.horizons)} minutes")
