@@ -164,6 +164,22 @@ This development screen must be **local-only / $0** and use already existing fea
 
 Do not purchase the reserved holdout block until the development result is permanently recorded and a separate holdout protocol/cost plan is frozen.
 
+## Implementation checkpoint
+
+The protocol was implemented only after the rules above were frozen.
+
+Dedicated screen:
+
+- `scripts/gexy_tradeflow_session_state_development.py`
+- implementation commit: `9eb096fa1f0a8980fa88d793a3d53b1ce9ddf3b4`
+
+Safeguards:
+
+- `tests/test_gexy_tradeflow_session_state_development.py`
+- safeguard commit: `80d7eaaf8801933f40b42065acc392eb72a7bf1b`
+
+The implementation hard-codes the 17 development dates and the three reserved holdout dates, uses the frozen 90% opening sample, filters causal timestamps to 09:31-09:40 America/New_York, computes exactly the six descriptors above, performs only the frozen univariate/leave-one-day-out screen, and selects at most one eligible candidate. The reserved holdout dates are never read by the script.
+
 ## Scientific limits
 
 This protocol is explicitly exploratory development on already-seen data. It is designed to reduce—not eliminate—regime-search overfitting by fixing the early cutoff, descriptor list, analysis, and selection rule before the screen.
