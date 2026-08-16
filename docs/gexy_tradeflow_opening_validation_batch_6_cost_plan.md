@@ -73,17 +73,36 @@ Immediately before the paid replay acquisition, the missing CBBO scope was re-pr
 
 The visible replay diagnostics include successful feature generation for 2026-07-23 and 2026-07-22. For 2026-07-22, 385 replay minutes were built with 4 low-parity-pair minutes skipped; for 2026-07-23, the replay reported zero low-parity-pair minutes skipped. These are upstream construction diagnostics only and do not expose the Batch-6 trade-flow endpoints.
 
-The cumulative pre-download estimate used for authorized Batch-6 upstream acquisition so far is **$0.136567 metadata + $0.084454 CBBO = $0.221021**. This is estimate-based budget accounting, not final vendor billing.
+The cumulative pre-download estimate used for authorized Batch-6 upstream acquisition before TCBBO is **$0.136567 metadata + $0.084454 CBBO = $0.221021**. This is estimate-based budget accounting, not final vendor billing.
 
-No opening-window TCBBO has been acquired and no Batch-6 endpoint has been inspected.
+## Opening-only bounded TCBBO pricing
 
-## Next rule
+After all three replay caches were complete, the trade-flow cost planner was run in metadata-only mode for the exact frozen Batch-6 scope: SPXW 0DTE, schema `tcbbo`, 09:30-10:00 America/New_York only, opening-forward +/-200 SPX points, and the three dates in frozen order. No TCBBO records were downloaded.
 
-The replay caches now provide the opening-forward anchors needed for the frozen strike selection. The next permitted operation is **metadata-only pricing** of SPXW 0DTE TCBBO for the exact Batch-6 scope:
+| Date | Opening forward | Selected contracts | Opening TCBBO estimate |
+|---|---:|---:|---:|
+| 2026-07-24 | 7411.862708 | 160 | $2.076316 |
+| 2026-07-23 | 7416.675000 | 160 | $2.356086 |
+| 2026-07-22 | 7494.025000 | 160 | $1.901407 |
 
-- dates in frozen order: 2026-07-24, 2026-07-23, 2026-07-22
-- window: 09:30-10:00 America/New_York only
-- strike band: opening-forward +/-200 SPX points
-- schema: TCBBO
+**Estimated bounded opening-only TCBBO total: $6.333809.**
 
-No TCBBO purchase is authorized yet. Record and review the per-date and total TCBBO estimates before setting any paid cap. No Batch-6 endpoint may be extracted or inspected before all later authorized acquisitions and local preparation are complete.
+The planner confirmed all three chains were cached, the frozen order was preserved, the window was 09:30-10:00 only, the strike scope was opening-forward +/-200 points, and the pricing run called metadata cost estimation only. No Batch-6 endpoint was extracted or inspected.
+
+## Reviewed paid TCBBO caps
+
+The per-date downloader remains fail-closed with an immediate re-price before any paid request and a hard local ceiling of $5.00 per invocation. To keep the requests tightly bounded while allowing modest pricing headroom, the reviewed per-date preflight-estimate caps are:
+
+| Date | Current estimate | Reviewed cap | Estimate headroom |
+|---|---:|---:|---:|
+| 2026-07-24 | $2.076316 | **$2.14** | $0.063684 |
+| 2026-07-23 | $2.356086 | **$2.43** | $0.073914 |
+| 2026-07-22 | $1.901407 | **$1.96** | $0.058593 |
+
+The sum of the reviewed per-date caps is **$6.53**, compared with the current three-date estimate of **$6.333809**.
+
+Each paid request is authorized only if its immediate pre-download re-price is at or below that date's recorded cap. If any date exceeds its cap, stop before download and review the changed price rather than raising the cap automatically.
+
+Acquisition must remain in frozen order: **2026-07-24 -> 2026-07-23 -> 2026-07-22**. This authorization covers only opening-window TCBBO for the frozen 09:30-10:00, +/-200-point scope. It does not authorize closing-window data, any alternate strike band, or any endpoint inspection between dates.
+
+No Batch-6 endpoint may be extracted or inspected until all three authorized TCBBO acquisitions are complete and all three dates have gone through the frozen local preparation pipeline.
