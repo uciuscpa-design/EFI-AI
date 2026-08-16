@@ -126,3 +126,11 @@ The first batch-3 opening-window date was purchased on 2026-08-15 before any bat
 The immediate pre-download re-price remained **$2.035417**, within the frozen **$2.08** operational cap. The unchanged 160-symbol 09:30-10:00 America/New_York TCBBO window was cached successfully.
 
 No 2026-08-06 batch-3 endpoint result has been inspected. The batch remains committed to continue in the frozen order with 2026-08-05 and then 2026-08-04 before any batch-3 extraction or validation analysis. No early stopping is permitted based on intermediate results.
+
+### Acquisition record — 2026-08-05
+
+The second batch-3 opening-window date was purchased on 2026-08-15 before any batch-3 trade-flow extraction, Greek weighting, feature scoring, or endpoint analysis was performed.
+
+The immediate pre-download re-price remained **$1.966996**, within the frozen **$2.01** operational cap. The unchanged 120-symbol 09:30-10:00 America/New_York TCBBO window was cached successfully.
+
+No 2026-08-06 or 2026-08-05 batch-3 endpoint result has been inspected. The batch remains committed to purchase the final frozen date, 2026-08-04, before any batch-3 extraction or validation analysis. No early stopping is permitted based on intermediate results.
