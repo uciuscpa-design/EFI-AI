@@ -104,6 +104,8 @@ The fail-closed downloader `scripts/gexy_tradeflow_download.py` prices the exact
 
 The 2026-07-21 and 2026-07-20 dry runs used exactly the frozen 09:30-10:00 window and ±200-point strike band. Each successful downloader run explicitly reported `DRY RUN ONLY: no market data downloaded`. An earlier duplicated 2026-07-20 command failed argument parsing at `--max-cost` and therefore did not price or download data.
 
+The first 2026-07-17 dry-run attempt was also duplicated on one PowerShell line, so `--max-cost` was parsed as the invalid value `5uv`. Argument parsing failed before any pricing request or market-data download; 2026-07-17 remains pending.
+
 Next steps:
 
 1. price 2026-07-17 using the same frozen dry-run scope;
