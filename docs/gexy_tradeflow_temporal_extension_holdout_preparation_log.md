@@ -128,9 +128,43 @@ Quality note: chain matching is 100%. The 20.5082% UNKNOWN-trade share is preser
 
 All three reserved temporal-extension holdout dates have completed local TCBBO extraction and frozen aggressor classification. Each date achieved 100% chain matching. UNKNOWN observations remain unforced under the frozen classifier.
 
+## Stage 4B — causal minute tradeflow features
+
+The Stage 4B builder reads only local classified TCBBO CSVs and cached replay data. Flow during minute M is timestamped M+1 before the exact-timestamp replay/label join. Forward-return label columns are written to the local feature CSV as required by the frozen pipeline but are hidden from terminal output by default during holdout preparation.
+
+### 2026-07-21 — complete
+
+Executed local-only command:
+
+```powershell
+uv run --with pandas python scripts/gexy_tradeflow_features.py --date 2026-07-21 --windows 09:30-10:00
+```
+
+Observed preparation summary:
+
+| Metric | Value |
+|---|---:|
+| Completed flow minutes | 30 |
+| Replay-matched minutes | 30 |
+| Replay match pct | 100.0% |
+| Frozen flow features | 19 |
+| Causal alignment | minute M flow timestamped M+1 |
+| Terminal forward-return labels | hidden |
+
+Local output:
+
+- `data/gexy/tradeflow/gexy_spxw_2026-07-21_tradeflow_minute_features.csv`
+
+Quality note: all 30 completed opening-window flow minutes matched cached replay state exactly. The builder reported that forward-return label values were written to the local feature CSV but not displayed. No Endpoint B was inspected or adjudicated.
+
+### Remaining Stage 4B work
+
+- 2026-07-20: causal minute tradeflow feature build pending.
+- 2026-07-17: causal minute tradeflow feature build pending.
+
 ## Next frozen preparation steps
 
-1. build the frozen tradeflow feature layer from the three classified files;
+1. complete Stage 4B causal minute tradeflow features for 2026-07-20 and 2026-07-17;
 2. build Black76 Greek-weighted hedge proxy features using the frozen hedge sign convention;
 3. verify the frozen Greek-volume coverage requirement, including the 90% coverage floor;
 4. only after all preparation checks pass, run the dedicated holdout reveal.
