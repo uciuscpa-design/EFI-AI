@@ -118,14 +118,17 @@ The protocol above was frozen before implementation.
 Dedicated characterization script:
 
 - `scripts/gexy_tradeflow_chronological_drift.py`
-- implementation commit: `b44ea248a4ee46952d59cf1342922d8f882cade1`
+- initial implementation commit: `b44ea248a4ee46952d59cf1342922d8f882cade1`
+- direct-script import hardening commit: `8b8cc2bb67cd664c123ed74536b3efd09cfede7c`
 
 Safeguards:
 
 - `tests/test_gexy_tradeflow_chronological_drift.py`
 - safeguard commit: `0b6c6514ce35dfb7c3ebff902e8b5ed4842df52b`
 
-The implementation hard-codes the 17 chronological seen dates and the three excluded holdout dates, recomputes the unchanged 90%-coverage opening Endpoint B from existing local feature files, reuses the already-frozen strict stability classification, fixes the rolling window at five sessions, and performs only the diagnostics listed above. It contains no market-data client and no predictor-selection logic.
+Before any local execution, the script-to-script helper import was removed to avoid a Windows direct-execution path dependency. The same already-frozen leave-one-minute-out values and strict sign-stability classification are now implemented locally in the drift script using the existing package-level frozen Spearman function. This technical hardening changed no dates, endpoint values, diagnostics, rolling window, interpretation rule, or data access.
+
+The implementation hard-codes the 17 chronological seen dates and the three excluded holdout dates, recomputes the unchanged 90%-coverage opening Endpoint B from existing local feature files, fixes the rolling window at five sessions, and performs only the diagnostics listed above. It contains no market-data client and no predictor-selection logic.
 
 ## Scientific limits
 
