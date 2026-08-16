@@ -2,9 +2,7 @@
 
 ## Status
 
-Recorded after the frozen batch-4 protocol and before any paid batch-4 market-data download.
-
-The default metadata-only planner was run for the three frozen untouched sessions. No definition, statistics/open-interest, CBBO, or TCBBO market-data records were downloaded by this pricing run.
+Recorded after the frozen batch-4 protocol and before any batch-4 endpoint inspection.
 
 Frozen dates remain, in acquisition order:
 
@@ -12,11 +10,11 @@ Frozen dates remain, in acquisition order:
 2. 2026-07-31
 3. 2026-07-30
 
-The initial pricing-only planner displayed dates chronologically because the earlier multi-date parser sorted input. That display ordering did not expose endpoint data and did not alter the frozen validation-date set. The parser has since been changed to preserve first-seen caller order while de-duplicating dates, with a regression test covering the frozen batch-4 order.
+The initial pricing-only planner displayed dates chronologically because the earlier multi-date parser sorted input. That display ordering did not expose endpoint data and did not alter the frozen validation-date set. The parser was changed before paid acquisition to preserve first-seen caller order while de-duplicating dates, with a regression test covering the frozen batch-4 order.
 
-## Metadata-only pricing result
+## Initial metadata-only pricing result
 
-| Date | Definition estimate | Statistics/OI estimate | Total metadata estimate | Chain status |
+| Date | Definition estimate | Statistics/OI estimate | Total metadata estimate | Initial chain status |
 |---|---:|---:|---:|---|
 | 2026-08-03 | $0.032331 | $0.012128 | $0.044459 | missing |
 | 2026-07-31 | $0.032616 | $0.012515 | $0.045131 | missing |
@@ -24,18 +22,42 @@ The initial pricing-only planner displayed dates chronologically because the ear
 
 **Estimated definition + OI total for all three dates: $0.134623.**
 
-Exact-symbol CBBO-1m cost is still pending because the three daily chain CSVs do not yet exist. Opening-only +/-200 TCBBO pricing is also pending until both chain and replay inputs exist so the opening forward can be determined under the frozen selection rule.
+The default pricing run downloaded no market data.
 
 ## Safety change before paid chain build
 
-`scripts/gexy_multiday_plan.py` was hardened after the pricing run. `--build-missing-chains` now defaults to a zero-dollar fail-closed guard unless `--max-metadata-download-cost` is explicitly supplied. Before downloading any missing-chain definition/OI data, the script re-prices every missing date in the invocation and aborts before download if the re-priced total exceeds the reviewed guard.
+`scripts/gexy_multiday_plan.py` was hardened before paid chain acquisition. `--build-missing-chains` defaults to a zero-dollar fail-closed guard unless `--max-metadata-download-cost` is explicitly supplied. Before downloading any missing-chain definition/OI data, the script re-prices every missing date in the invocation and aborts before download if the re-priced total exceeds the reviewed guard.
 
-The guard is a local preflight estimate guard, not a vendor transactional billing cap. Full-day CBBO remains a separate later acquisition stage with its own preflight cost guard.
+The guard is a local preflight estimate guard, not a vendor transactional billing cap. Full-day CBBO is a separate acquisition stage with its own preflight cost guard.
 
-## Reviewed paid metadata cap
+## Reviewed paid metadata cap and completed chain acquisition
 
-After the $0 metadata-only estimate was confirmed and the fail-closed guard was verified through `--help`, the reviewed batch-4 missing-chain metadata cap is **$0.15 total** for the frozen three-date invocation.
+The reviewed batch-4 missing-chain metadata cap was **$0.15 total** for the frozen three-date invocation. Immediately before download, the script re-priced the same scope at exactly **$0.134623**, below the guard, and then acquired only the definition/statistics inputs needed to build the daily 0DTE chains.
 
-The current estimate is $0.134623, leaving $0.015377 of preflight-estimate headroom. The paid chain build is authorized only if the immediate re-priced total is at or below $0.15. If the re-priced total exceeds $0.15, the script must abort before any definition/OI download and no higher cap should be substituted without a new recorded review.
+Paid chain acquisition completed in the frozen order:
 
-This authorization covers only definition/statistics inputs needed to create the three daily 0DTE chain CSVs. It does **not** authorize full-day CBBO-1m, opening TCBBO, or any other market-data purchase.
+| Date | Re-priced metadata total | Contracts saved | Chain file |
+|---|---:|---:|---|
+| 2026-08-03 | $0.044459 | 492 | `gexy_spxw_2026-08-03_0dte_oi.csv` |
+| 2026-07-31 | $0.045131 | 958 | `gexy_spxw_2026-07-31_0dte_oi.csv` |
+| 2026-07-30 | $0.045033 | 474 | `gexy_spxw_2026-07-30_0dte_oi.csv` |
+
+**Total pre-download estimated metadata spend used for the guard: $0.134623.** No CBBO or TCBBO records were downloaded in this stage.
+
+## Exact-symbol full-day CBBO-1m pricing after chain build
+
+Once the chains existed, the same run metadata-priced the exact-symbol full-day CBBO-1m scope without downloading those quotes:
+
+| Date | Contracts | Exact-symbol full-day CBBO-1m estimate |
+|---|---:|---:|
+| 2026-08-03 | 492 | $0.026307 |
+| 2026-07-31 | 958 | $0.050464 |
+| 2026-07-30 | 474 | $0.025125 |
+
+**Estimated full-day CBBO-1m total: $0.101896.**
+
+The combined metadata estimate plus priced-but-not-yet-downloaded CBBO estimate is $0.236519, but only the $0.134623 chain-input stage has been authorized and executed so far.
+
+Opening-only +/-200 TCBBO pricing remains pending until replay features exist so the opening forward can be determined under the frozen selection rule.
+
+No batch-4 endpoint has been inspected. No CBBO-1m or TCBBO purchase is authorized by this document unless a later recorded review explicitly sets its own cap.
