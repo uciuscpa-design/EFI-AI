@@ -38,7 +38,7 @@ def partial_spearman(
     control_columns = [column for column in frame.columns if column not in {"signal", "target"}]
     x_resid = _rank_residual(frame["signal"], frame[control_columns])
     y_resid = _rank_residual(frame["target"], frame[control_columns])
-    if np.std(x_resid) == 0 or np.std(y_resid) == 0:
+    if np.std(x_resid) <= 1e-12 or np.std(y_resid) <= 1e-12:
         return n, float("nan")
     return n, float(np.corrcoef(x_resid, y_resid)[0, 1])
 
