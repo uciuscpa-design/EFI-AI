@@ -36,8 +36,6 @@ Acquisition completed in frozen order:
 
 **Total pre-download estimated metadata spend used for the guard: $0.136567.** The guard is a local preflight estimate guard, not a vendor transactional billing cap.
 
-No full-day CBBO-1m or opening-window TCBBO records were downloaded in this stage.
-
 ## Exact-symbol full-day CBBO-1m pricing after chain build
 
 After the chains were built, the same run metadata-priced the exact-symbol full-day CBBO-1m replay scope without downloading those quotes:
@@ -49,8 +47,6 @@ After the chains were built, the same run metadata-priced the exact-symbol full-
 | 2026-07-22 | 496 | $0.024953 |
 
 **Estimated exact-symbol full-day CBBO-1m total: $0.084454.**
-
-The combined metadata estimate plus currently priced CBBO estimate is **$0.221021**. Only the $0.136567 chain-input stage has been executed so far; the CBBO figure remains pricing-only.
 
 ## Fresh no-download CBBO replay preflight
 
@@ -64,12 +60,30 @@ The guarded multi-day replay planner was then run for the same frozen three-date
 
 **Fresh estimated new CBBO total: $0.084454.** The displayed cost guard was **$0.000000**, and the planner exited with `NO MARKET DATA DOWNLOADED`, confirming fail-closed behavior.
 
-## Reviewed paid CBBO cap
+## Reviewed paid CBBO cap and completed replay acquisition
 
-The reviewed Batch-6 full-day exact-symbol CBBO-1m cap is **$0.10 total** for the frozen three-date invocation. This provides $0.015546 of estimate headroom over the fresh $0.084454 preflight.
+The reviewed Batch-6 full-day exact-symbol CBBO-1m cap was **$0.10 total** for the frozen three-date invocation, providing $0.015546 of estimate headroom over the fresh $0.084454 preflight.
 
-The paid replay acquisition is authorized only if the immediate pre-download re-priced total is at or below **$0.10**. If the re-priced total exceeds $0.10, the script must abort before download and no higher cap may be substituted without a new recorded review.
+Immediately before the paid replay acquisition, the missing CBBO scope was re-priced at **$0.084454**, below the $0.10 guard. The acquisition then completed across the full frozen three-date block and built the cached full-day CBBO files plus 15-minute replay feature files. The final multi-day summary reported:
 
-This authorization covers only the exact-symbol full-day CBBO-1m data required to build replay caches for 2026-07-24, 2026-07-23, and 2026-07-22. It does not authorize opening-window TCBBO or any other Batch-6 market-data purchase.
+- `MULTI-DAY REPLAY COMPLETE`
+- `DATES: 3`
+- `RE-PRICED NEW CBBO COST USED FOR GUARD: $0.084454`
+- manifest: `gexy_spxw_multiday_replay_manifest.csv`
 
-After all three replay caches and 15-minute replay features are built, the next permitted paid-data-related operation is metadata-only pricing of the frozen opening 09:30-10:00, opening-forward +/-200 SPX-point TCBBO scope. No Batch-6 endpoint may be extracted or inspected before all later authorized acquisitions and local preparation are complete.
+The visible replay diagnostics include successful feature generation for 2026-07-23 and 2026-07-22. For 2026-07-22, 385 replay minutes were built with 4 low-parity-pair minutes skipped; for 2026-07-23, the replay reported zero low-parity-pair minutes skipped. These are upstream construction diagnostics only and do not expose the Batch-6 trade-flow endpoints.
+
+The cumulative pre-download estimate used for authorized Batch-6 upstream acquisition so far is **$0.136567 metadata + $0.084454 CBBO = $0.221021**. This is estimate-based budget accounting, not final vendor billing.
+
+No opening-window TCBBO has been acquired and no Batch-6 endpoint has been inspected.
+
+## Next rule
+
+The replay caches now provide the opening-forward anchors needed for the frozen strike selection. The next permitted operation is **metadata-only pricing** of SPXW 0DTE TCBBO for the exact Batch-6 scope:
+
+- dates in frozen order: 2026-07-24, 2026-07-23, 2026-07-22
+- window: 09:30-10:00 America/New_York only
+- strike band: opening-forward +/-200 SPX points
+- schema: TCBBO
+
+No TCBBO purchase is authorized yet. Record and review the per-date and total TCBBO estimates before setting any paid cap. No Batch-6 endpoint may be extracted or inspected before all later authorized acquisitions and local preparation are complete.
