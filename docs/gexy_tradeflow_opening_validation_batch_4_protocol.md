@@ -107,6 +107,16 @@ Before any market-data purchase for replay/chain preparation:
 
 No paid command is authorized by this protocol alone. Metadata-only pricing is not endpoint exposure.
 
+## Frozen local-processing implementation checkpoint
+
+All authorized Batch-4 acquisitions were completed before endpoint processing. After acquisition closure, a dedicated Batch-4 local pipeline was frozen before any Batch-4 endpoint was evaluated:
+
+- `scripts/gexy_tradeflow_prepare_batch4.py` prepares all supplied dates using only the already acquired local caches, with the scope hard-coded to opening 09:30-10:00, opening-forward +/-200 points, and 15-minute labels. It runs extraction, raw-flow feature construction, and Greek-weighted hedge-flow feature construction, captures detailed child output to per-day logs, and does **not** evaluate validation endpoints.
+- `scripts/gexy_tradeflow_opening_validation_batch4.py` is the dedicated Batch-4 validator. It evaluates **15 minutes only**, reports Endpoint A and Endpoint B separately, and includes the pre-specified single-control and pairwise-control diagnostics plus opening replay-match count, median symbol-minute Greek solve rate, and median classified-volume Greek coverage.
+- CLI/order regression tests were added for both scripts before Batch-4 endpoint evaluation.
+
+The existing Batch-3 validator must not be used for Batch 4 because it automatically evaluates both 5-minute and 15-minute horizons.
+
 ## Epistemic limits
 
 OPRA does not identify customer/dealer inventory or executed underlying dealer hedge trades. `hedge_delta_units` remains an opposite-side liquidity-provider hedge proxy derived from quote-based aggressor inference and Black-76 Greeks. Correlation or partial correlation does not establish causality or a deployable trading edge.
