@@ -52,10 +52,24 @@ After the chains were built, the same run metadata-priced the exact-symbol full-
 
 The combined metadata estimate plus currently priced CBBO estimate is **$0.221021**. Only the $0.136567 chain-input stage has been executed so far; the CBBO figure remains pricing-only.
 
-## Next rule
+## Fresh no-download CBBO replay preflight
 
-Before any paid CBBO acquisition, run the guarded multi-day replay planner in no-download mode for the same three frozen dates and 15-minute horizon. Record the fresh exact-symbol CBBO estimate and confirm the downloader remains fail-closed at a zero-dollar guard.
+The guarded multi-day replay planner was then run for the same frozen three-date order with `--horizons 15` and without `--download`.
 
-Only after that fresh no-download preflight may a separate reviewed CBBO cap be recorded. No opening-window TCBBO purchase is authorized yet.
+| Date | Contracts | Quotes cached | Fresh exact-symbol full-day CBBO-1m estimate |
+|---|---:|---|---:|
+| 2026-07-24 | 618 | no | $0.033803 |
+| 2026-07-23 | 484 | no | $0.025698 |
+| 2026-07-22 | 496 | no | $0.024953 |
 
-No Batch-6 endpoint may be extracted or inspected before all later authorized acquisitions and local preparation are complete.
+**Fresh estimated new CBBO total: $0.084454.** The displayed cost guard was **$0.000000**, and the planner exited with `NO MARKET DATA DOWNLOADED`, confirming fail-closed behavior.
+
+## Reviewed paid CBBO cap
+
+The reviewed Batch-6 full-day exact-symbol CBBO-1m cap is **$0.10 total** for the frozen three-date invocation. This provides $0.015546 of estimate headroom over the fresh $0.084454 preflight.
+
+The paid replay acquisition is authorized only if the immediate pre-download re-priced total is at or below **$0.10**. If the re-priced total exceeds $0.10, the script must abort before download and no higher cap may be substituted without a new recorded review.
+
+This authorization covers only the exact-symbol full-day CBBO-1m data required to build replay caches for 2026-07-24, 2026-07-23, and 2026-07-22. It does not authorize opening-window TCBBO or any other Batch-6 market-data purchase.
+
+After all three replay caches and 15-minute replay features are built, the next permitted paid-data-related operation is metadata-only pricing of the frozen opening 09:30-10:00, opening-forward +/-200 SPX-point TCBBO scope. No Batch-6 endpoint may be extracted or inspected before all later authorized acquisitions and local preparation are complete.
