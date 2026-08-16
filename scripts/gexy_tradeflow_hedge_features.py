@@ -102,6 +102,14 @@ def main() -> None:
         default=DEFAULT_DATA_DIR,
         help="directory containing local classified TCBBO CSVs",
     )
+    parser.add_argument(
+        "--show-label-values",
+        action="store_true",
+        help=(
+            "explicitly print forward-return label values in the terminal preview; default hides them so "
+            "holdout preparation can build hedge features without revealing endpoint-related labels"
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -174,12 +182,17 @@ def main() -> None:
         "hedge_gex_notional_per_1pct",
         "forward",
     ]
-    for horizon in args.horizons:
-        column = f"forward_return_{horizon}m_bps"
-        if column in combined.columns:
-            display.append(column)
-    print("\nLAST 8 HEDGE-FLOW ROWS")
+    if args.show_label_values:
+        for horizon in args.horizons:
+            column = f"forward_return_{horizon}m_bps"
+            if column in combined.columns:
+                display.append(column)
+        print("\nLAST 8 HEDGE-FLOW ROWS (LABEL VALUES EXPLICITLY ENABLED)")
+    else:
+        print("\nLAST 8 HEDGE-FLOW ROWS (FORWARD-RETURN LABEL VALUES HIDDEN)")
     print(combined[display].tail(8).to_string(index=False))
+    if not args.show_label_values:
+        print("HOLDOUT SAFETY: forward-return label values were written to the hedge feature CSV but not displayed.")
     print("\nNO PAID DATA REQUESTS: this script reads only local classified TCBBO CSVs and cached replay data.")
 
 
