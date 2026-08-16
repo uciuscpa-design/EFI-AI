@@ -120,3 +120,14 @@ The Batch 4 validation result remains failed/mixed regardless of this audit. No 
 ## Cost rule
 
 This audit is local-only and must make no market-data request. No new Databento purchase is authorized.
+
+## Frozen implementation checkpoint
+
+The audit was implemented only after this protocol was committed, and before any audit output was viewed:
+
+- `packages/gexy/tradeflow_batch4_heterogeneity.py` — fixed sample construction, rank-control decomposition, leave-one-minute-out calculations, and contribution concentration
+- `scripts/gexy_tradeflow_batch4_heterogeneity_audit.py` — local-only CLI fixed to the protocol variables and 15-minute target
+- `tests/test_gexy_tradeflow_batch4_heterogeneity.py` — numerical/unit safeguards
+- `tests/test_gexy_tradeflow_batch4_heterogeneity_audit_cli.py` — CLI launch/scope safeguard
+
+Implementation does not add any alternate horizon, window, signal, coverage threshold, or market-state feature. The audit result must be recorded before any further Batch 4 exploratory work.
