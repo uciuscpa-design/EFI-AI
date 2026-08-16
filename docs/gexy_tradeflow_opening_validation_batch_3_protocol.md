@@ -95,3 +95,26 @@ After all purchased dates have been processed, report day-level sign stability f
 Before any purchase, run metadata-only pricing for all three frozen dates using the opening window only and the unchanged +/-200-point strike band. Pricing is not validation-result exposure.
 
 Do not download TCBBO during the pricing step. Review the three estimates together before authorizing any paid command.
+
+### Metadata pricing and pre-purchase budget decision — 2026-08-15
+
+Metadata-only pricing was completed for all three frozen batch-3 dates before any batch-3 TCBBO was downloaded or inspected.
+
+Estimated opening-window costs under the unchanged opening-forward +/-200-point selection logic were:
+
+- 2026-08-06: opening forward 7725.886062; 160 exact symbols; **$2.035417**
+- 2026-08-05: opening forward 7786.550000; 120 exact symbols; **$1.966996**
+- 2026-08-04: opening forward 7636.428480; 136 exact symbols; **$2.315187**
+- total estimated batch-3 cost: **$6.317599**
+
+The differing exact-symbol counts arise from applying the same frozen +/-200-point selection logic to each cached chain; the protocol does not require a fixed contract count.
+
+The budget decision is frozen before seeing any batch-3 validation result: purchase **all three dates** in the pre-specified order 2026-08-06, 2026-08-05, 2026-08-04, provided each immediate pre-download re-price remains within its reviewed operational cap. Do not stop early because an intermediate result is favorable or unfavorable, and do not inspect batch-3 endpoint results until all authorized acquisitions are complete.
+
+Reviewed operational caps are:
+
+- 2026-08-06: **$2.08**
+- 2026-08-05: **$2.01**
+- 2026-08-04: **$2.36**
+
+The downloader's independent absolute safety ceiling remains **$5.00 per invocation**. If any date re-prices above its reviewed operational cap, refuse that download and record a fresh budget review before changing the cap. Any such budget exception must leave the frozen opening-only data scope and endpoint definitions unchanged.
