@@ -117,14 +117,53 @@ Observed Batch-6 outcome:
 
 Therefore Batch 6 is a **direct heterogeneity replication**. It does not restore a universal negative relationship and does not justify a directional production rule. The unchanged construction continues to produce materially positive and materially negative sessions.
 
+## Frozen post-validation influence audit
+
+After the official result above was permanently recorded, a separate influence-audit protocol was frozen before diagnostic execution. The audit reused the same 29-observation opening sample and only the same four variables used in the prior Batch-4/5 influence audits.
+
+The audit result was exceptionally clean:
+
+### Ordinary leave-one-minute-out stability
+
+- **2026-07-24:** 29/29 leave-one-out estimates remained negative; median -0.114395; range -0.222770 to -0.043240.
+- **2026-07-23:** 29/29 leave-one-out estimates remained positive; median +0.322934; range +0.264915 to +0.438971.
+- **2026-07-22:** 29/29 leave-one-out estimates remained negative; median -0.234811; range -0.304871 to -0.148331.
+
+### Two-control leave-one-minute-out stability
+
+- **2026-07-24:** 29/29 remained negative; median -0.110453; range -0.179697 to -0.010083.
+- **2026-07-23:** 29/29 remained positive; median +0.288597; range +0.254730 to +0.409964.
+- **2026-07-22:** 29/29 remained negative; median -0.122898; range -0.226042 to -0.033271.
+
+### Contribution concentration
+
+No session was dominated by one observation. Ordinary largest single absolute-contribution shares were 10.34%, 11.33%, and 11.64% for 2026-07-24, 2026-07-23, and 2026-07-22 respectively. Ordinary top-five shares were 42.34%, 43.83%, and 43.35%.
+
+The controlled concentration results were similarly distributed, with largest single shares between 11.48% and 12.54% and top-five shares between 38.43% and 42.24%.
+
+**Audit adjudication:** all three Batch-6 session signs are broad within the frozen sample. The positive 2026-07-23 session is not a one-minute artifact, and neither negative session is a one-minute artifact. The audit therefore strengthens the interpretation that broad opposite-sign session states recur under the unchanged construction.
+
+## Cumulative interpretation after Batch 6 audit
+
+The cumulative post-validation record now contains:
+
+- broad positive sessions under the fixed construction;
+- broad negative sessions under the fixed construction;
+- a near-zero / sign-fragile session under the fixed construction;
+- repeated evidence that positive and negative day-level relationships are not merely single-minute influence artifacts.
+
+Accordingly, the research question should now move away from trying to recover a universal sign. The next scientific question is whether the session state can be characterized prospectively using information available before or during the opening window, while keeping development and untouched validation strictly separated.
+
 ## Scientific limits
 
 Do not change the sign convention, aggressor classifier, strike band, coverage floor, horizon, window, or controls to improve this result.
 
 Do not discard 2026-07-23 because it conflicts with a negative-sign narrative, and do not let the two negative sessions erase prior broad positive or near-zero sessions.
 
-`hedge_delta_units` remains an opposite-side liquidity-provider/dealer-hedge proxy inferred from OPRA trade price versus pre-trade NBBO and Black-76 Greeks. OPRA does not identify customer/dealer inventory or executed underlying hedge trades. Correlation, partial correlation, sign stability, heterogeneity, and any later influence diagnostic do not establish causality or a production trading edge.
+`hedge_delta_units` remains an opposite-side liquidity-provider/dealer-hedge proxy inferred from OPRA trade price versus pre-trade NBBO and Black-76 Greeks. OPRA does not identify customer/dealer inventory or executed underlying hedge trades. Correlation, partial correlation, sign stability, heterogeneity, and influence diagnostics do not establish causality or a production trading edge.
 
 ## Next research rule
 
-Before buying another batch, perform only a separately frozen local post-validation influence audit on the same Batch-6 sample. The audit may ask whether 2026-07-23's positive association and the two negative sessions are broad or concentrated in a small number of observations. It may not create a regime classifier, alter official endpoints, remove observations, or introduce new horizons/signals.
+Do not immediately buy another batch to repeat the same sign-count exercise.
+
+First freeze a development-only regime-characterization protocol using already-seen dates. Any candidate state feature or rule discovered on seen dates must be labeled development-only and then frozen before being evaluated on a new untouched holdout block. No already-seen date may be presented as out-of-sample validation of a discovered regime rule.
