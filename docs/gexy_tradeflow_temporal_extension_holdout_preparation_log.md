@@ -246,14 +246,55 @@ Observed coverage preparation summary:
 
 Quality/adjudication note: the single 0%-coverage minute is not repaired, imputed, substituted, or used to alter the frozen threshold. It is excluded exactly under the pre-specified >=90% per-minute sample rule. The remaining 29 minutes are eligible for the eventual holdout endpoint calculation. No forward-return label or Endpoint B value has been inspected.
 
+### 2026-07-20 — hedge build complete; coverage eligibility verified
+
+Executed local-only hedge build:
+
+```powershell
+uv run --with pandas python scripts/gexy_tradeflow_hedge_features.py --date 2026-07-20 --windows 09:30-10:00
+```
+
+Observed hedge-build summary:
+
+| Metric | Value |
+|---|---:|
+| Symbol-minute Greek snapshots | 2,988 |
+| Greeks solved | 2,774 / 2,988 (92.8%) |
+| Median classified volume with Greeks | 99.9% |
+| Raw minimum classified volume with Greeks | 0.0% |
+| Completed hedge-flow minutes | 30 |
+| Replay-matched availability minutes | 30 / 30 |
+| Core hedge features | 15 |
+| Greek-volume quality fields | 2 |
+| Causal alignment | minute M quotes/flow/state timestamped M+1 |
+| Terminal forward-return labels | hidden |
+
+Local output:
+
+- `data/gexy/tradeflow/gexy_spxw_2026-07-20_tradeflow_hedge_features.csv`
+
+Holdout-safe eligibility inspection read only `flow_minute`, `timestamp`, and `hedge_greek_solved_contract_volume_pct`; no forward-return labels were read or displayed.
+
+Observed coverage eligibility summary:
+
+| Metric | Value |
+|---|---:|
+| Total opening-window minutes | 30 |
+| Eligible minutes at >=90% Greek-volume coverage | 29 |
+| Excluded minutes below 90% | 1 |
+| Excluded flow minute | 2026-07-20 13:30:00+00:00 |
+| Excluded feature timestamp | 2026-07-20 13:31:00+00:00 |
+| Excluded-minute coverage | 0.000000% |
+
+Quality/adjudication note: the single 0%-coverage minute is not repaired, imputed, substituted, or used to alter the frozen threshold. It is excluded exactly under the pre-specified >=90% per-minute sample rule. The remaining 29 minutes are eligible for the eventual holdout endpoint calculation. No forward-return label or Endpoint B value has been inspected.
+
 ### Remaining Stage 4C work
 
-- 2026-07-20: Black76 hedge build and holdout-safe coverage verification pending.
 - 2026-07-17: Black76 hedge build and holdout-safe coverage verification pending.
 
 ## Next frozen preparation steps
 
-1. complete Stage 4C Black76 hedge builds and coverage eligibility checks for 2026-07-20 and 2026-07-17;
+1. complete Stage 4C Black76 hedge build and coverage eligibility check for 2026-07-17;
 2. verify the dedicated holdout validator applies the frozen 09:30-10:00, >=90%-coverage, 15-minute Endpoint-B sample exactly;
 3. only after all preparation safeguards pass, reveal all three untouched Endpoint-B values together in one dedicated invocation.
 
