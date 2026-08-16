@@ -117,6 +117,22 @@ This characterization is strictly **local-only / $0** and reads only existing de
 
 No reserved holdout purchase or inspection is authorized by this protocol.
 
+## Implementation checkpoint
+
+The protocol was implemented only after all rules above were frozen.
+
+Dedicated characterization script:
+
+- `scripts/gexy_tradeflow_cumulative_heterogeneity_characterization.py`
+- implementation commit: `1d46cc90c98f5ff8b424b8745214f427f26bd3e1`
+
+Safeguards:
+
+- `tests/test_gexy_tradeflow_cumulative_heterogeneity_characterization.py`
+- safeguard commit: `7ffd04bbe5757917c7b14e1a20e1f35c74616b90`
+
+The script hard-codes the same 17 seen dates and three excluded holdout dates, reuses `audit_day` and the same frozen opening sample, computes exact ordinary leave-one-minute-out values only to assign the pre-specified stability categories, and produces Batch-independent cumulative CSV outputs. It contains no market-data client and no predictor-selection logic.
+
 ## Scientific limits
 
 The 17 dates are already-seen development data. This exercise is descriptive, not out-of-sample validation.
