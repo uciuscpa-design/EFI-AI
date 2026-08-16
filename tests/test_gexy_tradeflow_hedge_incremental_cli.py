@@ -16,6 +16,6 @@ def test_incremental_hedge_cli_launches_directly_from_repo_root() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "Greek-weighted GEXY hedge-flow proxies" in result.stdout
-    assert "completed flow-minute SPX move" in result.stdout
+    normalized_help = " ".join(result.stdout.split())
+    assert "Measure whether Greek-weighted GEXY hedge-flow proxies retain forward association" in normalized_help
     assert "--min-volume-coverage" in result.stdout
