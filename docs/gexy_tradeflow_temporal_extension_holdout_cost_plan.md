@@ -80,7 +80,7 @@ The replay-generated state/features remain preparation artifacts only. Do not in
 
 ## Stage 3 — opening TCBBO tradeflow
 
-All three opening TCBBO requests have been dry-run priced. Paid Stage-3 requests for 2026-07-21 and 2026-07-20 have completed successfully; 2026-07-17 remains unexecuted.
+All three opening TCBBO requests have been dry-run priced and all three paid Stage-3 acquisitions have completed successfully under their frozen per-date caps.
 
 The exact frozen Stage-3 scope is:
 
@@ -94,21 +94,19 @@ The exact frozen Stage-3 scope is:
 
 The fail-closed downloader `scripts/gexy_tradeflow_download.py` prices the exact request without downloading when `--execute` is omitted. It re-prices the exact request immediately before any paid download, rejects any estimate above the explicit cap, refuses to overwrite existing TCBBO files, and has a hard absolute $5 ceiling.
 
-### Dry-run estimates and frozen per-date caps
+### Dry-run estimates, frozen per-date caps, and execution status
 
 | Date | Opening forward | Exact symbols | Opening TCBBO estimate | Frozen paid cap | Status |
 |---|---:|---:|---:|---:|---|
 | 2026-07-21 | 7481.846627 | 160 | $1.988368 | $2.00 | paid download complete; pre-download recheck $1.988368; raw TCBBO cached |
 | 2026-07-20 | 7501.515003 | 160 | $2.240789 | $2.25 | paid download complete; pre-download recheck $2.240789; raw TCBBO cached |
-| 2026-07-17 | 7449.975000 | 160 | $2.352253 | $2.36 | dry run only; no download |
+| 2026-07-17 | 7449.975000 | 160 | $2.352253 | $2.36 | paid download complete; pre-download recheck $2.352253; raw TCBBO cached |
 
-Exact estimated Stage-3 TCBBO total: **$6.581410**.
+Exact Stage-3 TCBBO total based on the three immediate pre-download rechecks: **$6.581410**.
 
-Sum of frozen per-date paid caps: **$6.61**. These are independent fail-closed guards, not a blanket authorization to spend. Each paid request must still be explicitly executed by the user one date at a time; if the immediate pre-download re-price exceeds that date's frozen cap, the request must abort.
+Sum of frozen per-date paid caps: **$6.61**. The three requests were executed independently under those fail-closed guards; no request exceeded its cap.
 
-Estimated cumulative Stage-1 + Stage-2 + completed 2026-07-21 and 2026-07-20 Stage-3 data cost: **$4.470817**, using the frozen Stage-1/2 estimates plus the two immediate pre-download rechecks.
-
-Estimated cumulative Stage-1 + Stage-2 + all Stage-3 data cost, if the remaining 2026-07-17 Stage-3 request re-prices at its current estimate and is executed: **$6.823070**.
+Estimated cumulative Stage-1 + Stage-2 + completed Stage-3 data cost: **$6.823070**, using the frozen Stage-1/2 estimates plus the three Stage-3 immediate pre-download rechecks.
 
 ### Paid Stage-3 acquisition progress
 
@@ -136,19 +134,30 @@ The immediate pre-download cost recheck was **$2.240789**, within the cap. The d
 
 and reported `GEXY TCBBO PILOT COMPLETE: 1 window(s), pre-download estimated total $2.240789`.
 
+2026-07-17 was executed with the frozen **$2.36** cap:
+
+```powershell
+uv run --with databento --with pandas python scripts/gexy_tradeflow_download.py --date 2026-07-17 --windows 09:30-10:00 --strike-band-points 200 --max-cost 2.36 --execute
+```
+
+The immediate pre-download cost recheck was **$2.352253**, within the cap. The downloader cached:
+
+`data\gexy\tradeflow\gexy_spxw_2026-07-17_0930_1000_tcbbo.dbn.zst`
+
+and reported `GEXY TCBBO PILOT COMPLETE: 1 window(s), pre-download estimated total $2.352253`.
+
 The 2026-07-21, 2026-07-20, and 2026-07-17 dry runs all used exactly the frozen 09:30-10:00 window and ±200-point strike band. Each successful dry-run downloader invocation explicitly reported `DRY RUN ONLY: no market data downloaded`.
 
 Earlier duplicated PowerShell commands for 2026-07-20 and 2026-07-17 failed argument parsing before pricing or downloading and therefore had no paid market-data effect.
 
 Next steps:
 
-1. execute the final paid opening-TCBBO request for 2026-07-17 with its frozen $2.36 cap; it must immediately re-price and abort over cap;
-2. extract/build tradeflow and Greek-hedge features without revealing the holdout Endpoint B;
-3. verify frozen preparation/coverage requirements;
-4. run the dedicated frozen holdout reveal only after all preparation is complete.
+1. extract/build tradeflow and Greek-hedge features from the three cached TCBBO files without revealing the holdout Endpoint B;
+2. verify frozen preparation/coverage requirements, including the 90% Greek-volume coverage floor;
+3. run the dedicated frozen holdout reveal only after all preparation is complete.
 
 ## Scientific and cost limits
 
 The three dates remain an untouched temporal-extension holdout with respect to the endpoint result. Acquisition order, construction, opening window, 15-minute horizon, 90% Greek-volume coverage floor, hedge sign convention, and Endpoint-B definition remain governed by the frozen holdout protocol.
 
-Paid requests require explicit reviewed caps and user execution. Re-running already-cached local stages must not trigger new downloads.
+Paid requests required explicit reviewed caps and user execution. Re-running already-cached local stages must not trigger new downloads.
