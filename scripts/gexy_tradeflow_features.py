@@ -95,6 +95,14 @@ def main() -> None:
         default=DEFAULT_DATA_DIR,
         help="directory containing local classified TCBBO CSVs",
     )
+    parser.add_argument(
+        "--show-label-values",
+        action="store_true",
+        help=(
+            "explicitly print forward-return label values in the terminal preview; default hides them so "
+            "holdout preparation can build files without revealing endpoint-related labels"
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -144,12 +152,17 @@ def main() -> None:
         "flow_premium_imbalance",
         "forward",
     ]
-    for horizon in args.horizons:
-        column = f"forward_return_{horizon}m_bps"
-        if column in combined.columns:
-            display_columns.append(column)
-    print("\nLAST 8 CAUSAL MINUTE ROWS")
+    if args.show_label_values:
+        for horizon in args.horizons:
+            column = f"forward_return_{horizon}m_bps"
+            if column in combined.columns:
+                display_columns.append(column)
+        print("\nLAST 8 CAUSAL MINUTE ROWS (LABEL VALUES EXPLICITLY ENABLED)")
+    else:
+        print("\nLAST 8 CAUSAL MINUTE ROWS (FORWARD-RETURN LABEL VALUES HIDDEN)")
     print(combined[display_columns].tail(8).to_string(index=False))
+    if not args.show_label_values:
+        print("HOLDOUT SAFETY: forward-return label values were written to the feature CSV but not displayed.")
     print("\nNO PAID DATA REQUESTS: this feature builder reads only local classified CSVs and cached replay data.")
 
 
