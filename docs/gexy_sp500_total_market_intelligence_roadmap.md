@@ -1,5 +1,20 @@
 # GEXY S&P 500 Total-Market Intelligence Roadmap
 
+## Project status — PRIMARY GEXY NORTH-STAR MISSION
+
+Adopted on 2026-08-17 as the primary long-term goal for GEXY.
+
+This document is the authoritative roadmap for what GEXY becomes after the current frozen prospective SPXW replication is completed and formally recorded. The existing 2026-08-17 through 2026-08-21 prospective protocol remains the immediate unfinished prerequisite and must not be changed, expanded, reinterpreted, or contaminated by any of the new total-market ideas below.
+
+The project sequence is therefore:
+
+1. Finish the current frozen prospective replication exactly as predeclared.
+2. Record its official result before any post-hoc analysis.
+3. Begin implementation of this total-market intelligence roadmap as GEXY's primary development program.
+4. Preserve the same scientific discipline for every new information family and every future predictive claim.
+
+This roadmap and the previously recorded Bookmap/CME MBO integration roadmap are complementary. CME/Bookmap MBO becomes the first major new information family after the prospective block is complete.
+
 ## Objective
 
 Evolve GEXY from an SPXW option-flow and hedge-pressure research engine into a broad S&P 500 market-intelligence system that fuses independently sourced information streams into calibrated multi-horizon forecasts.
