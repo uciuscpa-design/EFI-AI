@@ -21,6 +21,25 @@ Evolve GEXY from an SPXW option-flow and hedge-pressure research engine into a b
 
 The aspiration is maximum achievable predictive accuracy and reliability, not a guaranteed fixed hit rate. A blanket promise of 95%+ accuracy five or more candles ahead across all regimes is not scientifically credible. The system should instead maximize validated out-of-sample accuracy, probability calibration, magnitude accuracy, and selective high-confidence precision while abstaining when evidence is weak or contradictory.
 
+## Authority standard — earn it, never claim it
+
+GEXY's ambition is to become an exceptionally reliable authority on S&P 500 market behavior, but authority must be earned through evidence rather than declared through branding, reputation, or a favorable backtest.
+
+The standard is:
+
+- be right for reasons that remain valid on untouched future data;
+- quantify uncertainty rather than hide it;
+- preserve and publish internally the full record of successes, failures, abstentions, regime changes, and model degradation;
+- distinguish what is observed from what is inferred;
+- distinguish correlation from causation;
+- refuse to force a forecast when the evidence is weak;
+- continuously test whether prior relationships still hold;
+- make every extraordinary accuracy claim reproducible and auditable;
+- state exactly where, when, how often, at what horizon, and under what market conditions a forecast method deserves confidence;
+- never let a target accuracy, commercial goal, or desired narrative override the measured evidence.
+
+If GEXY eventually demonstrates extraordinary predictive accuracy, that authority should come from repeated prospective validation, calibrated probabilities, transparent coverage, and a permanent audit trail showing both what worked and what failed.
+
 ## Core prediction outputs
 
 For configurable horizons (for example 1, 2, 3, 5, 8, 13, 21 candles), produce:
@@ -197,3 +216,5 @@ Any 95%+ claim must specify exact horizon, target definition, confidence thresho
 Build the most rigorously measured S&P 500 forecasting system we can: broad information coverage, causal timestamps, multi-source agreement, explicit uncertainty, selective high-confidence forecasts, continuous drift detection, and a permanent audit trail.
 
 The goal is not to force every candle into a prediction. The goal is to know when the evidence is unusually strong, quantify that strength honestly, and prove it repeatedly on untouched future data.
+
+GEXY should aspire to authority only insofar as it can prove that authority: being right for the right reasons, knowing when it does not know, and being able to demonstrate exactly where, when, how often, and under what conditions its forecasts deserve trust.
