@@ -1,0 +1,163 @@
+# GEXY temporal-extension holdout cost plan
+
+## Status
+
+This cost plan is governed by the separately frozen temporal-extension holdout protocol. The three reserved dates remain a temporal-extension holdout and are not being used to rescue the failed 09:40 session-state screen.
+
+Reserved holdout dates, in frozen order:
+
+1. 2026-07-21
+2. 2026-07-20
+3. 2026-07-17
+
+No endpoint value may be inspected until all frozen holdout acquisition/preparation stages are complete and the dedicated holdout reveal is ready.
+
+## Stage 1 — definition + OI chain inputs
+
+Initial metadata-only estimates:
+
+| Date | Definition estimate | Statistics/OI estimate | Total metadata estimate |
+|---|---:|---:|---:|
+| 2026-07-21 | $0.033219 | $0.012674 | $0.045893 |
+| 2026-07-20 | $0.033226 | $0.012015 | $0.045241 |
+| 2026-07-17 | $0.032428 | $0.012373 | $0.044801 |
+
+Exact estimated definition+OI total: **$0.135936**.
+
+Reviewed Stage-1 guard: **$0.15 total**.
+
+Executed paid command:
+
+```powershell
+uv run --with databento --with pandas python scripts/gexy_multiday_plan.py --dates 2026-07-21,2026-07-20,2026-07-17 --build-missing-chains --max-metadata-download-cost 0.15
+```
+
+Immediate preflight re-price remained **$0.135936**, below the $0.15 guard, so the definition/statistics requests proceeded.
+
+Stage-1 outputs:
+
+| Date | Chain contracts | Chain status |
+|---|---:|---|
+| 2026-07-21 | 490 | built |
+| 2026-07-20 | 474 | built |
+| 2026-07-17 | 1018 | built |
+
+The planner explicitly reported that Stage 1 downloaded definition/statistics data only. Full-day CBBO quotes were **not** downloaded in this stage.
+
+## Stage 2 — exact-symbol full-day CBBO
+
+With all three cached chains available, the exact-symbol 09:30-16:00 America/New_York CBBO-1m estimates were:
+
+| Date | Contracts | Exact-symbol CBBO-1m estimate |
+|---|---:|---:|
+| 2026-07-21 | 490 | $0.024306 |
+| 2026-07-20 | 474 | $0.026450 |
+| 2026-07-17 | 1018 | $0.054968 |
+
+Exact Stage-2 CBBO total estimate: **$0.105724**.
+
+Reviewed Stage-2 new-CBBO guard: **$0.12 total**.
+
+Executed paid command:
+
+```powershell
+uv run --with databento --with pandas python scripts/gexy_multiday_replay.py --dates 2026-07-21,2026-07-20,2026-07-17 --download --max-new-cbbo-cost 0.12
+```
+
+Immediate Stage-2 pre-download re-price remained **$0.105724**, below the $0.12 guard. All three dates completed and the replay driver saved `gexy_spxw_multiday_replay_manifest.csv`.
+
+Observed replay preparation included:
+
+- 2026-07-20: 474 contracts, 118610 cached quote rows, 388 replay minutes, 1 minute skipped for low parity pairs, and replay features saved.
+- 2026-07-17: 1018 contracts, 226038 cached quote rows, 389 replay minutes, 0 minutes skipped for low parity pairs, and replay features saved.
+- 2026-07-21 also completed as part of the three-date multiday replay; the user-provided transcript excerpt did not include its detailed replay row counts, so none are invented here.
+
+The multiday driver reported `DATES: 3`, `RE-PRICED NEW CBBO COST USED FOR GUARD: $0.105724`, and a saved manifest. Re-running after the quote CSVs exist should reuse cached CBBO at $0 new CBBO download cost.
+
+Estimated cumulative Stage-1 + Stage-2 data cost based on the frozen estimates: **$0.241660**.
+
+The replay-generated state/features remain preparation artifacts only. Do not inspect or adjudicate the temporal-extension Endpoint-B holdout result yet.
+
+## Stage 3 — opening TCBBO tradeflow
+
+All three opening TCBBO requests have been dry-run priced and all three paid Stage-3 acquisitions have completed successfully under their frozen per-date caps.
+
+The exact frozen Stage-3 scope is:
+
+- dates: 2026-07-21, 2026-07-20, 2026-07-17;
+- window: 09:30-10:00 America/New_York only;
+- schema: OPRA TCBBO;
+- strike scope: opening-forward ±200 SPX points;
+- exact symbols selected from each cached same-day SPXW 0DTE chain;
+- pricing first, with no `--execute` flag;
+- separate reviewed per-date cap required before each paid request.
+
+The fail-closed downloader `scripts/gexy_tradeflow_download.py` prices the exact request without downloading when `--execute` is omitted. It re-prices the exact request immediately before any paid download, rejects any estimate above the explicit cap, refuses to overwrite existing TCBBO files, and has a hard absolute $5 ceiling.
+
+### Dry-run estimates, frozen per-date caps, and execution status
+
+| Date | Opening forward | Exact symbols | Opening TCBBO estimate | Frozen paid cap | Status |
+|---|---:|---:|---:|---:|---|
+| 2026-07-21 | 7481.846627 | 160 | $1.988368 | $2.00 | paid download complete; pre-download recheck $1.988368; raw TCBBO cached |
+| 2026-07-20 | 7501.515003 | 160 | $2.240789 | $2.25 | paid download complete; pre-download recheck $2.240789; raw TCBBO cached |
+| 2026-07-17 | 7449.975000 | 160 | $2.352253 | $2.36 | paid download complete; pre-download recheck $2.352253; raw TCBBO cached |
+
+Exact Stage-3 TCBBO total based on the three immediate pre-download rechecks: **$6.581410**.
+
+Sum of frozen per-date paid caps: **$6.61**. The three requests were executed independently under those fail-closed guards; no request exceeded its cap.
+
+Estimated cumulative Stage-1 + Stage-2 + completed Stage-3 data cost: **$6.823070**, using the frozen Stage-1/2 estimates plus the three Stage-3 immediate pre-download rechecks.
+
+### Paid Stage-3 acquisition progress
+
+2026-07-21 was executed with the frozen **$2.00** cap:
+
+```powershell
+uv run --with databento --with pandas python scripts/gexy_tradeflow_download.py --date 2026-07-21 --windows 09:30-10:00 --strike-band-points 200 --max-cost 2.00 --execute
+```
+
+The immediate pre-download cost recheck was **$1.988368**, within the cap. The downloader cached:
+
+`data\gexy\tradeflow\gexy_spxw_2026-07-21_0930_1000_tcbbo.dbn.zst`
+
+and reported `GEXY TCBBO PILOT COMPLETE: 1 window(s), pre-download estimated total $1.988368`.
+
+2026-07-20 was executed with the frozen **$2.25** cap:
+
+```powershell
+uv run --with databento --with pandas python scripts/gexy_tradeflow_download.py --date 2026-07-20 --windows 09:30-10:00 --strike-band-points 200 --max-cost 2.25 --execute
+```
+
+The immediate pre-download cost recheck was **$2.240789**, within the cap. The downloader cached:
+
+`data\gexy\tradeflow\gexy_spxw_2026-07-20_0930_1000_tcbbo.dbn.zst`
+
+and reported `GEXY TCBBO PILOT COMPLETE: 1 window(s), pre-download estimated total $2.240789`.
+
+2026-07-17 was executed with the frozen **$2.36** cap:
+
+```powershell
+uv run --with databento --with pandas python scripts/gexy_tradeflow_download.py --date 2026-07-17 --windows 09:30-10:00 --strike-band-points 200 --max-cost 2.36 --execute
+```
+
+The immediate pre-download cost recheck was **$2.352253**, within the cap. The downloader cached:
+
+`data\gexy\tradeflow\gexy_spxw_2026-07-17_0930_1000_tcbbo.dbn.zst`
+
+and reported `GEXY TCBBO PILOT COMPLETE: 1 window(s), pre-download estimated total $2.352253`.
+
+The 2026-07-21, 2026-07-20, and 2026-07-17 dry runs all used exactly the frozen 09:30-10:00 window and ±200-point strike band. Each successful dry-run downloader invocation explicitly reported `DRY RUN ONLY: no market data downloaded`.
+
+Earlier duplicated PowerShell commands for 2026-07-20 and 2026-07-17 failed argument parsing before pricing or downloading and therefore had no paid market-data effect.
+
+Next steps:
+
+1. extract/build tradeflow and Greek-hedge features from the three cached TCBBO files without revealing the holdout Endpoint B;
+2. verify frozen preparation/coverage requirements, including the 90% Greek-volume coverage floor;
+3. run the dedicated frozen holdout reveal only after all preparation is complete.
+
+## Scientific and cost limits
+
+The three dates remain an untouched temporal-extension holdout with respect to the endpoint result. Acquisition order, construction, opening window, 15-minute horizon, 90% Greek-volume coverage floor, hedge sign convention, and Endpoint-B definition remain governed by the frozen holdout protocol.
+
+Paid requests required explicit reviewed caps and user execution. Re-running already-cached local stages must not trigger new downloads.

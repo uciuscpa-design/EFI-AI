@@ -44,3 +44,10 @@ def test_cloud_database_url_alias_is_accepted(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://efi:secret@db/efi_ai")
     settings = Settings(environment="production", api_key="test-key")
     assert settings.database_url.startswith("postgresql")
+
+
+def test_databento_key_alias_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABENTO_API_KEY", "db-test-key")
+    settings = Settings()
+    assert settings.databento_api_key == "db-test-key"
+    assert settings.has_databento_credentials is True

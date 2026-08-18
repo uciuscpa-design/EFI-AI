@@ -17,7 +17,69 @@ class Settings(BaseSettings):
     max_position_notional: float = 10_000.0
     max_daily_loss: float = 1_000.0
 
+    # Alpaca credentials and endpoints. Keep compatibility with Alpaca's
+    # conventional APCA_* environment names while also allowing EFI-prefixed
+    # project configuration.
+    alpaca_api_key_id: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "APCA_API_KEY_ID",
+            "ALPACA_API_KEY_ID",
+            "EFI_ALPACA_API_KEY_ID",
+        ),
+    )
+    alpaca_api_secret_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "APCA_API_SECRET_KEY",
+            "ALPACA_API_SECRET_KEY",
+            "EFI_ALPACA_API_SECRET_KEY",
+        ),
+    )
+    alpaca_data_base_url: str = Field(
+        default="https://data.alpaca.markets",
+        validation_alias=AliasChoices(
+            "APCA_DATA_BASE_URL",
+            "ALPACA_DATA_BASE_URL",
+            "EFI_ALPACA_DATA_BASE_URL",
+        ),
+    )
+    alpaca_trading_base_url: str = Field(
+        default="https://paper-api.alpaca.markets",
+        validation_alias=AliasChoices(
+            "APCA_API_BASE_URL",
+            "ALPACA_TRADING_BASE_URL",
+            "EFI_ALPACA_TRADING_BASE_URL",
+        ),
+    )
+    alpaca_options_feed: str = Field(
+        default="indicative",
+        validation_alias=AliasChoices(
+            "APCA_OPTIONS_FEED",
+            "ALPACA_OPTIONS_FEED",
+            "EFI_ALPACA_OPTIONS_FEED",
+        ),
+    )
+
+    # Databento is currently used by GEXY for historical OPRA definitions,
+    # start-of-day open interest, and consolidated option quotes.
+    databento_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "DATABENTO_API_KEY",
+            "EFI_DATABENTO_API_KEY",
+        ),
+    )
+
     model_config = SettingsConfigDict(env_prefix="EFI_", env_file=".env", extra="ignore")
+
+    @property
+    def has_alpaca_credentials(self) -> bool:
+        return bool(self.alpaca_api_key_id and self.alpaca_api_secret_key)
+
+    @property
+    def has_databento_credentials(self) -> bool:
+        return bool(self.databento_api_key)
 
     @model_validator(mode="after")
     def enforce_production_safety(self) -> "Settings":
