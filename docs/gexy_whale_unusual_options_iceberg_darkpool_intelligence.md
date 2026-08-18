@@ -12,6 +12,16 @@ Implemented foundation:
 - `scripts/gexy_off_exchange_features.py` — local-CSV feature builder that makes no paid market-data requests;
 - `tests/test_gexy_off_exchange.py` — tests for explicit venue identification, no buyer/seller inference, prior-only large-print baselines, M+1 availability, and future-data non-contamination.
 
+Local verification on 2026-08-17:
+
+```text
+uv run --with pandas --with pytest pytest -q tests/test_gexy_off_exchange.py
+..... [100%]
+5 passed in 22.46s
+```
+
+Interpretation: the isolated off-exchange/TRF unit-test suite passed locally. This verifies the tested software contracts only; it does not establish predictive value, calibration, economic value, or prospective forecasting validity.
+
 ## Objective
 
 Add specialized detection and causal testing for unusually large or informative market activity without assuming that size, venue, or hidden-liquidity behavior automatically implies informed trading. Each signal family must be measured independently, timestamped by when it was actually observable, and validated prospectively before it can influence high-confidence GEXY forecasts.
