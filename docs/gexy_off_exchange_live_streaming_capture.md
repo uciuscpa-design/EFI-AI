@@ -4,6 +4,18 @@
 
 Implemented in isolation. **Not activated as a forecasting input and not connected to the frozen 2026-08-17 through 2026-08-21 prospective SPXW protocol.**
 
+## Local verification
+
+Verified locally on 2026-08-17 with:
+
+```text
+uv run --with pandas --with pytest pytest -q tests/test_gexy_off_exchange_sources.py tests/test_gexy_off_exchange_streaming.py
+............ [100%]
+12 passed in 8.57s
+```
+
+Interpretation: the provider-adapter, FINRA short-volume, 13F timing, streaming-subscription, payload-decoding, and live receive-time causality contracts passed their current isolated unit tests. This verifies software behavior only; it does not establish predictive value, calibration, economic value, or live-feed entitlement/coverage.
+
 ## Push-first transport
 
 GEXY now has a push-stream capture foundation for U.S. equity trade data rather than a high-frequency REST polling loop.
